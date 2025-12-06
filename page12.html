@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>drift::gather</title>
+  <style>
+    body {
+      overflow: hidden;
+      background: #000;
+      color: #e6e6e6;
+      margin: 0;
+    }
+    #particleCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    .word {
+      position: absolute;
+      color: #ffffffdd;
+      font-family: "Courier New", monospace;
+      font-size: 22px;
+      opacity: 0;
+      transition: opacity 1.2s ease, transform 1.2s ease;
+      pointer-events: none;
+      text-shadow: 0 0 8px #ffffff88;
+      z-index: 3;
+    }
+
+    #fadeBlack {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      opacity: 0;
+      transition: opacity 2s ease;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #centerCircle {
+      position: fixed;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      transition: opacity 1.2s ease;
+      cursor: pointer;
+      z-index: 6;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="particleCanvas" aria-hidden="true"></canvas>
+  <div id="fadeBlack"></div>
+  <div id="centerCircle"></div>
+
+  <script>
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const fadeBlack = document.getElementById('fadeBlack');
+    const centerCircle = document.getElementById('centerCircle');
+
+    const symbols = ['*','@','#','~','+','%','&','?',';',':'];
+
+    // dense field
+    const particleCount = 550;
+    const particles = [];
+
+    let mouse = { x: 0, y: 0, active: false };
+
+    let hotspots = [];
+    let lockedHotspots = [];
+    let allHotspotsLocked = false;
+
+    const collapsed = [false, false, false, false, false]; // per galaxy
+    const revealWords = ["you", "wander", "into", "her", "soul"];
+    let clickWordIndex = 0; // sequence of user clicks -> word order
+    let allWordsRevealed = false;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      // Constellation layout
+      hotspots = [
+        { x: canvas.width * 0.18, y: canvas.height * 0.30 }, // upper-left
+        { x: canvas.width * 0.26, y: canvas.height * 0.82 }, // lower-left
+        { x: canvas.width * 0.50, y: canvas.height * 0.50 }, // center
+        { x: canvas.width * 0.73, y: canvas.height * 0.65 }, // mid-right lower
+        { x: canvas.width * 0.82, y: canvas.height * 0.18 }  // upper-right
+      ];
+
+      lockedHotspots = hotspots.map((_, i) => lockedHotspots[i] || false);
+      allHotspotsLocked = lockedHotspots.every(Boolean);
+    }
+
+    function createParticles() {
+      particles.length = 0;
+      for (let i = 0; i < particleCount; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          vx: (Math.random() - 0.5) * 1.0,
+          vy: (Math.random() - 0.5) * 1.0,
+          char: symbols[Math.floor(Math.random() * symbols.length)],
+          size: 8 + Math.random() * 4,
+          pulse: Math.random() * Math.PI * 2,
+
+          locked: false,
+          lockedIndex: null,
+          orbitRadius: 0,
+          orbitAngle: Math.random() * Math.PI * 2,
+          orbitSpeed: 0.001 + Math.random() * 0.001,
+
+          collapsing: false,
+          fadeProgress: 1,
+          targetX: null,
+          targetY: null
+        });
+      }
+    }
+
+    function drawParticle(p, time, pulseBoost) {
+      const pulse = Math.sin(time / 450 + p.pulse) * 0.7;
+      const size = p.size + pulse + pulseBoost;
+      ctx.font = `${size.toFixed(2)}px "Courier New", monospace`;
+      ctx.fillStyle = `rgba(255,255,255,${p.fadeProgress})`;
+      ctx.fillText(p.char, p.x, p.y);
+    }
+
+    function addIdleDrift(p) {
+      if (mouse.active || p.locked || allHotspotsLocked || p.collapsing) return;
+      p.vx += (Math.random() - 0.5) * 0.07;
+      p.vy += (Math.random() - 0.5) * 0.07;
+    }
+
+    // subtle repulsion
+    function repelFromMouse(p) {
+      if (!mouse.active || allHotspotsLocked || p.collapsing) return;
+      const dx = p.x - mouse.x;
+      const dy = p.y - mouse.y;
+      const dist = Math.hypot(dx, dy);
+      const influence = 70;
+      if (dist < influence && dist > 0.01) {
+        const force = (influence - dist) / influence * 0.04;
+        p.vx += (dx / dist) * force;
+        p.vy += (dy / dist) * force;
+      }
+    }
+
+    function bundleTowardsHotspot(p, activeHotspots) {
+      let pulseBoost = 0;
+      for (const h of activeHotspots) {
+        const dx = h.x - p.x;
+        const dy = h.y - p.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const pullRadius = 190;
+        if (dist < pullRadius) {
+          const attraction = (pullRadius - dist) / pullRadius * 0.08;
+          p.vx += (dx / dist) * attraction;
+          p.vy += (dy / dist) * attraction;
+          pulseBoost = Math.max(pulseBoost, 2);
+        }
+      }
+      return pulseBoost;
+    }
+
+    function twirlAroundHotspot(p, time) {
+      const target = hotspots[p.lockedIndex];
+      if (!target) return;
+      p.orbitAngle += p.orbitSpeed;
+      const wobble = Math.sin(time / 900 + p.pulse) * 0.3;
+      const radius = p.orbitRadius + wobble;
+      p.x = target.x + Math.cos(p.orbitAngle) * radius;
+      p.y = target.y + Math.sin(p.orbitAngle) * radius;
+      drawParticle(p, time, 3.0);
+    }
+
+    function showWord(word, baseX, baseY) {
+      const el = document.createElement("div");
+      el.className = "word";
+      el.textContent = word;
+
+      // center-ish offset based on word length
+      const offsetX = word.length * 6;
+      el.style.left = `${baseX - offsetX}px`;
+      el.style.top = `${baseY - 10}px`;
+
+      document.body.appendChild(el);
+
+      requestAnimationFrame(() => {
+        el.style.opacity = "1";
+        el.style.transform = "translateY(-12px)";
+      });
+    }
+
+function collapseGalaxy(index) {
+  if (collapsed[index]) return;
+  if (clickWordIndex >= revealWords.length) return;
+
+  collapsed[index] = true;
+
+  const word = revealWords[clickWordIndex];
+  clickWordIndex++;
+
+  const center = hotspots[index];
+
+  // Assign each locked particle a target position at the hotspot center
+  for (const p of particles) {
+    if (p.lockedIndex === index && !p.collapsing) {
+      p.collapsing = true;
+      p.locked = false;
+
+      // collapse inward toward center (gentle, not fast)
+      p.targetX = center.x;
+      p.targetY = center.y;
+    }
+  }
+
+  // Fade in the word at the center
+  showWord(word, center.x, center.y);
+
+  // If all galaxies collapsed, trigger the final sequence
+  if (collapsed.every(Boolean) && !allWordsRevealed) {
+    triggerFinalFadeSequence();
+  }
+}
+function triggerFinalFadeSequence() {
+  allWordsRevealed = true;
+
+  // wait 1s after last word
+  setTimeout(() => {
+    fadeBlack.style.opacity = "1";
+  }, 1000);
+
+  // after black fully up, show center circle
+  setTimeout(() => {
+    centerCircle.style.opacity = "1";
+    centerCircle.style.pointerEvents = "auto";
+  }, 2000);
+}
+
+    centerCircle.addEventListener("click", () => {
+      window.location.href = "page14.html";
+    });
+
+    function update() {
+      const now = performance.now();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const activeHotspots =
+        !allHotspotsLocked && mouse.active
+          ? hotspots
+              .map((h, i) => ({ ...h, index: i }))
+              .filter(({ x, y, index }) => {
+                if (lockedHotspots[index]) return false;
+                const dist = Math.hypot(x - mouse.x, y - mouse.y);
+                return dist < 100;
+              })
+          : [];
+
+      for (const p of particles) {
+        // collapsing into word shape
+// gentler, drifting collapse
+// collapsing inward toward hotspot center
+if (p.collapsing) {
+  if (p.targetX != null && p.targetY != null) {
+
+    // gentle inward pull (slower and softer)
+    p.x += (p.targetX - p.x) * 0.06;
+    p.y += (p.targetY - p.y) * 0.06;
+
+    // VERY light drift (remove the futuristic effect)
+    p.x += (Math.random() - 0.5) * 0.15;
+    p.y += (Math.random() - 0.5) * 0.15;
+  }
+
+  // slow fade-out while collapsing inward
+  p.fadeProgress *= 0.97;
+
+  drawParticle(p, now, 0);
+  continue;
+}
+
+        if (p.locked) {
+          twirlAroundHotspot(p, now);
+          continue;
+        }
+
+        if (allHotspotsLocked) {
+          // background: hold & drift slowly, don’t disappear
+          p.vx *= 0.985;
+          p.vy *= 0.985;
+          p.vx += (Math.random() - 0.5) * 0.004;
+          p.vy += (Math.random() - 0.5) * 0.004;
+        } else {
+          addIdleDrift(p);
+          repelFromMouse(p);
+          const pulseBoost = bundleTowardsHotspot(p, activeHotspots);
+
+          p.x += p.vx;
+          p.y += p.vy;
+
+          if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+          if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+          p.x = Math.max(0, Math.min(canvas.width, p.x));
+          p.y = Math.max(0, Math.min(canvas.height, p.y));
+
+          const damping = mouse.active ? 0.993 : 0.989;
+          p.vx *= damping;
+          p.vy *= damping;
+
+          drawParticle(p, now, pulseBoost);
+          continue;
+        }
+
+        // free-floating background in the post-formation phase
+        p.x += p.vx;
+        p.y += p.vy;
+
+        p.x = Math.max(0, Math.min(canvas.width, p.x));
+        p.y = Math.max(0, Math.min(canvas.height, p.y));
+
+        drawParticle(p, now, 0);
+      }
+
+      requestAnimationFrame(update);
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      mouse = {
+        x: e.clientX - r.left,
+        y: e.clientY - r.top,
+        active: true
+      };
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      mouse.active = false;
+    });
+
+    function findTargetHotspot(position) {
+      let candidate = null;
+      hotspots.forEach((h, index) => {
+        if (lockedHotspots[index]) return;
+        const dist = Math.hypot(h.x - position.x, h.y - position.y);
+        if (dist < 140 && (!candidate || dist < candidate.dist)) {
+          candidate = { index, dist };
+        }
+      });
+      return candidate;
+    }
+
+    function lockParticlesToHotspot(targetIndex) {
+      if (lockedHotspots[targetIndex]) return;
+      const target = hotspots[targetIndex];
+      if (!target) return;
+
+      lockedHotspots[targetIndex] = true;
+      const lockRadius = 150;
+
+      for (const p of particles) {
+        const dx = p.x - target.x;
+        const dy = p.y - target.y;
+        const dist = Math.hypot(dx, dy);
+        if (!p.locked && dist < lockRadius) {
+          p.locked = true;
+          p.lockedIndex = targetIndex;
+          p.orbitRadius = Math.max(20, Math.min(90, dist || 20));
+          p.orbitAngle = Math.atan2(dy, dx);
+          p.vx = 0;
+          p.vy = 0;
+        }
+      }
+
+      if (lockedHotspots.every(Boolean)) {
+        allHotspotsLocked = true;
+      }
+    }
+
+    canvas.addEventListener('click', (e) => {
+      const r = canvas.getBoundingClientRect();
+      const pos = { x: e.clientX - r.left, y: e.clientY - r.top };
+
+      if (!allHotspotsLocked) {
+        // still forming galaxies
+        const target = findTargetHotspot(pos);
+        if (target) lockParticlesToHotspot(target.index);
+        return;
+      }
+
+      // all galaxies formed: clicks collapse them into words (in click order)
+      hotspots.forEach((h, i) => {
+        if (collapsed[i]) return;
+        const dist = Math.hypot(h.x - pos.x, h.y - pos.y);
+        if (dist < 60) {
+          collapseGalaxy(i);
+        }
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      resize();
+      createParticles();
+    });
+
+    resize();
+    createParticles();
+    update();
+  </script>
+</body>
+</html>

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>between/</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            background-color: #000000;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            color: #ffffff;
+            position: relative;
+        }
+
+        /* Title text */
+        .title-text {
+            position: fixed;
+            top: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 18px;
+            letter-spacing: 1px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 1s;
+            text-align: center;
+        }
+
+        .title-text.show {
+            opacity: 1;
+        }
+
+        .title-text a {
+            color: #ffffff;
+            text-decoration: none;
+        }
+
+        .title-text a:hover {
+            color: #ff0000;
+        }
+
+        /* Central figure */
+        .center-figure {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            z-index: 1;
+        }
+
+        .center-figure pre {
+            font-family: 'Courier New', monospace;
+            font-size: 6px;
+            line-height: 1.0;
+            color: #ffffff;
+            white-space: pre;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Scattered bowties */
+        .bowtie {
+            position: absolute;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .bowtie:hover {
+            opacity: 0.7;
+        }
+
+        .bowtie.dissolve {
+            animation: pixelDissolve 1s forwards;
+            pointer-events: none;
+        }
+
+        @keyframes pixelDissolve {
+            0% { 
+                opacity: 1;
+                filter: blur(0px);
+            }
+            25% {
+                opacity: 0.8;
+                filter: blur(1px);
+            }
+            50% {
+                opacity: 0.5;
+                filter: blur(3px);
+                transform: scale(0.95);
+            }
+            75% {
+                opacity: 0.2;
+                filter: blur(5px);
+                transform: scale(0.9);
+            }
+            100% {
+                opacity: 0;
+                filter: blur(8px);
+                transform: scale(0.85);
+            }
+        }
+
+        .bowtie pre {
+            font-family: 'Courier New', monospace;
+            font-size: 6px;
+            line-height: 1.0;
+            white-space: pre;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* per-character spans used for dissolve/type-in */
+        .pix { display: inline-block; transition: opacity 0.015s linear; }
+
+        /* style and glitch for the "her" link in title */
+        .title-text a#herLink { color: #00ff88; text-decoration: none; }
+        .title-text a#herLink:hover { color: #66ffbb; }
+
+        .title-pix { display: inline-block; opacity: 0; transition: opacity 0.08s linear; }
+
+        @keyframes smallGlitch {
+            0% { transform: translate(0,0); filter: hue-rotate(0deg); }
+            25% { transform: translate(-1px, 1px); filter: hue-rotate(30deg); }
+            50% { transform: translate(1px, -1px); filter: hue-rotate(-30deg); }
+            75% { transform: translate(-1px, 0); filter: hue-rotate(15deg); }
+            100% { transform: translate(0,0); filter: none; }
+        }
+
+        .title-text a.glitch {
+            animation: smallGlitch 0.36s linear 0s 2;
+            text-shadow: 0 0 6px rgba(255,255,255,0.08);
+        }
+
+        /* Bowtie overlay on center figure */
+        .bowtie-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .bowtie-overlay.show {
+            animation: glitchTypewriter 2s forwards;
+        }
+
+        @keyframes glitchTypewriter {
+            0% { 
+                opacity: 0;
+                clip-path: inset(0 100% 0 0);
+            }
+            10% {
+                opacity: 1;
+                clip-path: inset(0 90% 0 0);
+                filter: hue-rotate(90deg);
+            }
+            15% {
+                clip-path: inset(0 90% 0 0);
+                transform: translate(-50%, -50%) scale(0.8) translate(-2px, 2px);
+            }
+            20% {
+                clip-path: inset(0 80% 0 0);
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            30% {
+                clip-path: inset(0 70% 0 0);
+                filter: hue-rotate(0deg);
+            }
+            35% {
+                clip-path: inset(0 60% 0 0);
+                transform: translate(-50%, -50%) scale(0.8) translate(2px, -2px);
+            }
+            40% {
+                clip-path: inset(0 50% 0 0);
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            50% {
+                clip-path: inset(0 40% 0 0);
+            }
+            55% {
+                clip-path: inset(0 30% 0 0);
+                filter: hue-rotate(45deg);
+            }
+            60% {
+                clip-path: inset(0 30% 0 0);
+                transform: translate(-50%, -50%) scale(0.8) translate(-1px, 1px);
+            }
+            70% {
+                clip-path: inset(0 20% 0 0);
+                filter: hue-rotate(0deg);
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            80% {
+                clip-path: inset(0 10% 0 0);
+            }
+            85% {
+                clip-path: inset(0 5% 0 0);
+                transform: translate(-50%, -50%) scale(0.8) translate(1px, -1px);
+            }
+            90% {
+                clip-path: inset(0 0 0 0);
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            100% { 
+                opacity: 1;
+                clip-path: inset(0 0 0 0);
+                filter: none;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+        }
+
+        .bowtie-overlay pre {
+            font-family: 'Courier New', monospace;
+            font-size: 6px;
+            line-height: 1.0;
+            white-space: pre;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Different colors for each bowtie */
+        .bowtie:nth-child(2) pre { color: #ff0000; } /* red */
+        .bowtie:nth-child(3) pre { color: #00ff00; } /* green */
+        .bowtie:nth-child(4) pre { color: #006eff; } /* blue */
+        .bowtie:nth-child(5) pre { color: #ff00ff; } /* magenta */
+        .bowtie:nth-child(6) pre { color: #ffff00; } /* yellow */
+        .bowtie:nth-child(7) pre { color: #00ffff; } /* cyan */
+        .bowtie:nth-child(8) pre { color: #ff9900; } /* orange */
+    </style>
+</head>
+<body>
+    <!-- Title text -->
+    <div class="title-text" id="titleText">you put on a bowtie to meet <a href="page9.html?entry=ribs" id="herLink">her</a>.</div>
+
+    <!-- Central figure -->
+    <div class="center-figure">
+        <pre id="centerContent">********+++++++++++========+++====------:::::--:::::::::::::..:::-::....::-::.....................::::::::::::---===----==============++++++++++++****
+******++++++++++===========+++====--------::-----:::::::::::-=++*****+=++**+++=-::..........::::.:::::::::::::---==--------============+++++++++++++**
+****++++++++++==============++====---------------::::----=+*#%%%%%%%####%%#%##***+=-:::::...:::::.:::::::::::----==------------==========+++++++++++++
+*++++++++++++============--==+====---------------:--=+++*%@@@@@@@@@@@@@@@%@@@@@@@%%#*+===-::::::::::::::::::::--==--------------=============+++++++++
++++++++++++==============---=++===----------------=*#%%@@@@+==--:::::::::::::::-=#@@@@%%*==---::::::::::::::----=-------------------===========+++++++
++++++++++=============-------=+====---------------=+####+=----:::::::::::::::::::::--==--------::::::::::::::---=-:::---------------=============+++++
+++++++++===========-----------+====----------------------------====++======--:::::::::::-:-----:::::::::::::------:::::-----------------===========+++
++++++============--------------=====-----------=---:-==----===+++*##%%%%%%##*+=---:-::::::-----::::::::::::----=-::::::::::::------------============+
+++++===========--------------:-=+===---------==---------==-=======*******++====----:::::-------------::::::---=-:::::::::::::::-------------==========
+++============-------------::::-=====--------==---------=======+++++++====---------:------------------:::----==-:::::::::::::::::------------=========
+============------------::::::::-===--==---=========---=========++=+=-------::::::---------------------------==-:::::::::::::::::-::-----------=======
+==========------------::::::::::::====---==========---==-----:::::.....   .....::::--------:::------:::-----==-:::::::::::::::::::::-------------=====
+========-----------::::::::::::::::==================-------::.....            ...:::::::::::::----------====--:..::::::::::::::::::::--------------==
+======------------:::::::::::::::::-++===--=====---=-----:::......                ....::::::::----------====---:...:::::::::::::::::::::-------------=
+===-------------:::::::::::::::::.:-+=========----------::::....... ....... ..    .......:::-----------====----:.......:::::::::::::::::::------------
+=------------:::::::::::::::::::...-+========----------:::::.::.........................:::::-------===+==-----:...........:::::::::::::::::----------
+------------::::::::::::::::.......:=====++=====-==-----::::::-::::::::::..::::.........:::------===+++=------:.............:::::::::::::::::---------
+----------:::::::::::::::::....... .-=====+++=======-------:-::------------::-::::::::::::---=====++++=--------. .............:::::::::::::::::::-----
+--------::::::::::::::::.......... .-=======+++======---------=--===========-----:---------==+=++**++=----::---:  ................::::::::::::::::----
+-------:::::::::::::::............  .=======+++**++================++*+++**++++==========+++++****+==-----::---:  ..................::::::::::::::----
+-----:::::::::::::::..............   :========+*****++++++=+++++++******##*##***#*******+++******+=------:::---.  .................:::::::::::::::::--
+----::::::::::::::...............     :=========+********+*****#####################******###*++===---:::::---.    ..................:::::::::::::::::
+-:::::::::::::::.................       :--==-====++**********************************######*++==----::::::::.        .................:::::::::::::::
+:::::::::::::::.................         .-----=====++++***######************####%%%%%%###**++==---:::::::::            .................:::::::::::::
+:::::::::::::::................            .------===++++*+**##%%@@@@@@@@@@@@@@@@@@%%###**+====-::::::::::.             ....................::::::::::
+:::::::::::::.................                :---===++=+++++***#%%@@@@@@@@@@@@@@%%%##*++====---::::::-:.                 .................:::::::::::
+::::::::::::..............                      ----======+++++**##%%%%@@@@@@@@%%#***+++===-----::::::.                     ..................::::::::
+::::::::::...............                         :--========++++***#####%%%%%##***+++====---::-::::                           ................:::::::
+::::::::..............                              .--======++++**+++******##***++======-----:::.                             ................:::::::
+::::::...............                                  :======++++++++*****+*+*++*+===-----:::.                                  ................:::::
+::::::.............                                      :-===++++*****####****++===-----:::.                                          ...........::::
+::::..............                                          -====++++**####*#*+===---:::..                                                  ........::
+::...                                                          -=-=+++++***+++=--:::::.                                                          ....:
+                                                                  ------==-----:::::                                                                ..
+                                                                    .-::-::--:::.                                                                     
+                                                                      ..:::::.                                                                        
+                                                                                                                                                      
+                                                                                                                                                      
+                                                                                                                                                      
+                                                                                                                                                      
+                                                                                                                                                      
+                           ........                                                                                                                   
+        ..........................::::.                                                                                  ..                           
+   ..         ...... ...     ........:::..                                                                          :::::...................  .....   
+  :..         ............................::.                                                                    .:::.....         ..               ..
+::....          .....:.........   ..........::.                                                               .:-:....               ......          .
+::....        ............                ...:--.                                                         .:::----::......  ..  ..........           .
+:.....     ...............              ....:::---.                                                     .-:::::.......................... ...        .
+:... .  ......  . ........    ...........::--------.                                                  ---::::......      .............      ....      
+... .........       ....   ...::::::::---==++=------:.                                             :----::::...                .......       .........
+.   .....:..        .    ..::---====+**##%%#*+-===-:::                                           :---------:...... ..   ........ ...         ..::.....
+.............   .    . .....:-+#%%%####*+-:.....:---::.                                         ::::----==-.......................     ... ...:::::...
+.................         .........   ...........::--.                                          :::-----.......     ..::::-::..            ....::::...
+...............           .             ..........::.                                           .:--=-:......                                ..:......
+..  ..........           .. .             ........:::                                             :==::.......  ..                            ........
+..   . ...                ...           ........:::::                                              .:-:....                                   ....... 
+.     ..       .....       .................::::::::                                                .::::....       ..   .           ...      ......  
+.     .      ........      .......::::::::--------:                                                  .::::::.................        .....    ......  
+.            .........    .....:::--=====++***+=-.                                                    .:-------:::.............      .....    ..      
+.   . .         ....... .......::=*@@@@@@@@@%#+:                                                       .:--=++*++++++=-:::...         .       ... .. .
+.   .....                   ....:=*%@@@@@@@%*:                                                      ....      ..-*@@@+--:...         ..        ..  . .
+.........                    ....................                                                  :.....             ...                     .... ...
+ .  . ...                    ..................:::.                                               ::...........      ....        ...           ....   
+   .  .             ...... .  ........:....::::::::.                                              ::::..................      . .....          .......
+.  ..              ..............::::::::..:::::::::                                              .::::....... ..........    ......            ....  .
+ ...                  ..........::::::......:::::::.                                               .:::::.........................             ...    
+....                   .......::::::::.:::::::::::.                                                 .::::::::::::...................            .     
+..                    ......:::::::::-----:::::::                                                     :-----::::::::::::.............            ..   
+. .. .............    ...::::::::--------------.                                                        .-+****=---------::.........               ...
+.........................:..::--====---==:.                                                                .-*#*=-----------::::.....        ....  . .
+......................:::::--====----:                                                                        .::::::--:::::::::::........... ..... ..
+.....................:::----====----.                                                                       .......:-----:::::::::::..................
+...................::::----====----.                                                                      ..........:::--::::::::::...................
+..................::::------====--:..                                                                   ..      .  ..::----::::::::...................
+...................:::-----=====--::...                                                     ..  .     .               .:----::::::....................
+.................:::::----=====----::...                                                  .....                        .:-----::::....................
+...............::::::--=====-----::::...                                               .  ..                           ..::::::::::...................
+..............:::::-----=----=-::......                                                :                               ...::::-::::::::...............
+..........::::------====---==-:....                                                    .                                ....::::-:::::::..............
+...::.::::::----======----=-:..                                                        .                                 ....:::------:::::::.........
+:::::::-----========------:..                                                          .                                      .::--------::::::.......
+::::----====++++==---=--:..                                                            .                                        .::-------:::::::.::..
+::::---==++++==---===-::..                                                                                                        .:----=====--:::::::
+=========----=+++==--::..                                                                                                           .:---==+++++++===-
++=======++======---::....                                                                                                            ..:---==++++*+++=
++**###*++++=-::::::.....                                                                                                            ..::-----=====+++=
+----:::..:..                                                                                                                             ...  ........</pre>
+    </div>
+
+    <!-- Bowtie overlay container -->
+    <div class="bowtie-overlay" id="bowtieOverlay">
+        <pre id="overlayContent"></pre>
+    </div>
+
+    <!-- Scattered bowties will be inserted here by JavaScript -->
+
+    <script>
+        const titleText = document.getElementById('titleText');
+        const centerContent = document.getElementById('centerContent');
+        const bowtieOverlay = document.getElementById('bowtieOverlay');
+        const overlayContent = document.getElementById('overlayContent');
+
+        let clickedBowties = [];
+
+        // helper: escape HTML special chars
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // wrap text into per-character spans (.pix) preserving spaces and newlines
+        function wrapCharacters(text) {
+            text = String(text);
+            let out = '';
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '\n') {
+                    out += '<br>';
+                } else if (ch === ' ') {
+                    out += '<span class="pix">&nbsp;</span>';
+                } else if (ch === '\t') {
+                    out += '<span class="pix">&nbsp;&nbsp;&nbsp;&nbsp;</span>';
+                } else {
+                    out += '<span class="pix">' + escapeHtml(ch) + '</span>';
+                }
+            }
+            return out;
+        }
+
+        // Typewriter for the title line: slowly reveals characters and glitches 'her'
+        function startTitleTypewriter() {
+            const title = document.getElementById('titleText');
+            if (!title || title.dataset.typed === '1') return;
+            title.dataset.typed = '1';
+
+            const prefix = 'you put on a bowtie to meet ';
+            const her = 'her';
+
+            // Clear and build spans
+            title.innerHTML = '';
+            for (let i = 0; i < prefix.length; i++) {
+                const ch = prefix[i] === ' ' ? '\u00A0' : prefix[i];
+                const s = document.createElement('span');
+                s.className = 'title-pix';
+                s.textContent = ch;
+                title.appendChild(s);
+            }
+
+            const a = document.createElement('a');
+            a.href = 'page9.html?entry=ribs';
+            a.id = 'herLink';
+            for (let j = 0; j < her.length; j++) {
+                const s = document.createElement('span');
+                s.className = 'title-pix';
+                s.textContent = her[j];
+                a.appendChild(s);
+            }
+            title.appendChild(a);
+
+            // Reveal characters slowly
+            const chars = title.querySelectorAll('.title-pix');
+            const perChar = 120; // ms per character (slow)
+            chars.forEach((c, i) => {
+                setTimeout(() => { c.style.opacity = '1'; }, i * perChar);
+            });
+
+            // Glitch 'her' slightly after its characters appear
+            const totalDelay = (prefix.length + her.length) * perChar;
+            setTimeout(() => {
+                const herLink = document.getElementById('herLink');
+                if (herLink) {
+                    herLink.classList.add('glitch');
+                    setTimeout(() => herLink.classList.remove('glitch'), 700);
+                }
+            }, totalDelay + 120);
+        }
+
+        // Bowtie designs
+        const bowties = [
+            // BOWTIE 1
+            `       :                                         
+      :=%%%%%%%%%%##+-                           
+      :+%%%%%%%%%%%%%%%%%%%%%%%#*=:.  -          
+       =+*###%%%%%%%%%%%%%%@@@@@%%%%%#++-+       
+                       -#@@@@@@@@@@%%#*+-        
+                   .*@@@@@@@@@@@@@@%%#*++        
+             #%%%%#%@@@@@@@@@@@#                 
+             %@%%%%####%@+                       
+            -%@%%%%%%%%####-                     
+                   %%%%%%%%%%%#+                 
+                      .*%%%%%%%%%%%-             
+                           %@%%%%@@@@@@@.        
+                               %@@@@@%%##*.      
+     ##.                        %@%%@@%##%#=     
+     +%%##**:              #%%%@@@@%#####%#*     
+    =%%%%%###+=:     .#@@@@@@@@@@#**###%%%%#:    
+    +@@%%%%%%##**+=@@@@@@@@@@@%#####%%%%%%%%*    
+    *@@@@@@@@@@%%%%%@@@@@@%.%%@%%@@@@@@@@@@@*    
+   =#%%%%@@@@@@@@@@@@@####%@@@@@@@@@@@@@@@%#*-   
+   +#%%%%%%%%%%%%%%@@@%%%%%@@@%%%%%%%%%%%%%#*-   
+   -+%%@@@@@@@@@@@@@@@%%%%%@@@@@@@@@@@@@@@@%+    
+    +%%%%%@@@@@@@@@@#       +@@@@@@@@@%%%%%%*    
+    *%%%%%%%%%%%@@%-          #%%%%%%%%%%%%%+    
+     *@@@@@%%%%#-                +#%%%%%@@@*     
+     #%@@@@@%                        #@@@@%%     
+      #-                                  +      `,
+
+            // BOWTIE 2
+            `                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+   .#####+-                           .=*####    
+   ###########*:                 .+##########*   
+  :##############*-           .+##############   
+  ##################+       .*################+  
+  #####################%##%####################  
+  #############################################  
+  #############################################. 
+  #############################################  
+  *#################=.      .+#################  
+  .#############*-             -*#############-  
+   #########*=                     -*#########   
+   :#####=                              =####:   `,
+
+            // BOWTIE 3
+            `                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+   .**+.                                  :+*.   
+   ######*                             :*****#.  
+  +*--==+*#*.                        =**+=--=**  
+ .+:. .====*##.                    **+----:  =+: 
+ ----========+**                 **=------====+= 
+ ---=======-  -=#+             =#=-  :---=====++ 
+.---==  -====-===+#.         .*+-------=-  -===+.
+:--===--=======- .=***====+***=  :--======-====+-
+---=============-===+=====*##+---==============+=
+=-: .-===: :=====+++=====*###*++=====: :====. =++
++===++++++=++++====+*=+*#####*+===++++++++++==+++
+===+++++++++****:=**#########*+-:***+++++++++++++
+-==+++==++*+++++:=+**#######**+=:++++**+++=+****=
+.+=+++:-+++++++++*#           #*+++++***+-.+****:
+ +=+++++++++ .++#-             =#*+. +********** 
+ =+=+++++++++*#+                 *#************= 
+ .*+..++++**#*                     *##****= :**: 
+  +*++***##+                         +###****##  
+   ######-                             :######:  
+    **+                                   =##:   `,
+
+            // BOWTIE 4
+            `                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+                                                 
+         =@@@.                     *##@%         
+         #@@@@@@*              .+#%@@@@@.        
+        .@@@@%%@@@@-         *%%@@@@%%%@=        
+        =@@@@%@@@@@@@@@@@@*%%%%%%%%@@@@@#:...    
+   @@@@@@%%%%%%%%@@@@@@@@@@@@@@@@@@@%%%%@@@@@@-  
+   @@@@@@@@@@@@@%%%%%@@@%@%%@@@@@@@@@@@%@@@%##:  
+        =@@@@@@@@@@@@@@**%%%@@@@@@%%%%%@@.       
+        .@@@@@@@@@@@:          +@%#%%%%@@        
+         @@@@@@#+                  =+#@@*        
+         @@=.                                    `,
+
+            // BOWTIE 5
+            `                                                 
+      #*=                              =  =      
+    +*:  =*=.                        .*  *:      
+      *+: .=*-                   += -+ :*  +     
+   =*: .#+  .+#*:               *: +: += .#      
+     +#. =#:   +*-=#* +*=   .*.*-:+ :*  *= --    
+  .*:  *-  +*- :=+%-+@@##@@***  *- ++ =*  *-.    
+    =+..++. .=*: :#@%%*:%-%@- .-+**- . :++ .+    
+  +- :#: :*- .+*:-= %@%%%*%@#+. .:=+*+-  :*- -   
+   -#: =*. == +- + ****@@@#:.=+-.  .-+*+-  -+    
+   - =*. +* .* := =.          .**=.   .+#*= :    
+   :#. +* .#. *.                 +#+.    -#+     
+     -#  *- ==                     -*#+.   =     
+    #- =*                             =**-.      
+                                         -=      `,
+
+            // BOWTIE 6
+            `                                                 
+                                                 
+                                                 
+                                                 
+        #%@@#:                     #@@%#         
+       =@@@@%%@@@#            *@@@%%@@@@=        
+       %@@@@@@@%#%@@+      =@@%#%@@@@@@@@        
+      *%%%@@@@@@@@@@@@@%%%@@@@@@@@@@@@%%%+       
+      ##%%%%@@@@@@@@@@%###@@@@@@@@@@%%%%#*       
+      *%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@+       
+       #@@@@@@@@@@%%@-     @%%@@@@@@@@@@%.       
+       *@@@@@@%%%@@#        *@@%%%@@@@@@*        
+        %@@@@@#+                +#@@%@@%:        
+        @*                            +@         `,
+        ];
+
+        // Create and scatter bowties
+        function createBowties() {
+            const body = document.body;
+            // explicit colors matching intended order (index 0 = first bowtie)
+            const colors = [
+                '#ff9900', // bowtie 1 (orange)
+                '#ff0000', // bowtie 2 red
+                '#00ff00', // bowtie 3 green
+                '#0099ff', // bowtie 4 blue
+                '#ff00ff', // bowtie 5 magenta
+                '#ffff00', // bowtie 6 yellow
+                '#00ffff'  // bowtie 7 cyan
+            ];
+            const positions = [
+                { top: '5%', left: '10%' },
+                { top: '15%', right: '8%' },
+                { top: '45%', left: '5%' },
+                { bottom: '20%', left: '15%' },
+                { top: '60%', right: '12%' },
+                { bottom: '10%', right: '25%' },
+                { top: '30%', left: '45%' }
+            ];
+
+            bowties.forEach((bowtie, index) => {
+                const div = document.createElement('div');
+                div.className = 'bowtie';
+                div.style.top = positions[index].top || 'auto';
+                div.style.bottom = positions[index].bottom || 'auto';
+                div.style.left = positions[index].left || 'auto';
+                div.style.right = positions[index].right || 'auto';
+                
+                const pre = document.createElement('pre');
+                pre.textContent = bowtie;
+                // apply explicit color so DOM order doesn't affect nth-child styling
+                if (typeof colors[index] !== 'undefined') pre.style.color = colors[index];
+                div.appendChild(pre);
+                
+                // Click handler — per-character dissolve and randomized overlay reveal
+                div.addEventListener('click', () => {
+                    // If a bowtie was already clicked, ignore further clicks
+                    if (document.body.dataset.bowtieClicked === '1') return;
+                    // mark as clicked and disable other bowties
+                    document.body.dataset.bowtieClicked = '1';
+                    document.querySelectorAll('.bowtie').forEach(b => b.style.pointerEvents = 'none');
+
+                    // Show title text
+                    titleText.classList.add('show');
+
+                    // Start the title typewriter (which will reveal text and glitch 'her')
+                    startTitleTypewriter();
+
+                    // If not already wrapped, convert pre text into per-character spans
+                    if (pre.querySelectorAll('.pix').length === 0) {
+                        pre.innerHTML = wrapCharacters(bowtie);
+                    }
+
+                    // Per-character dissolve in random order (faster)
+                    const spans = Array.from(pre.querySelectorAll('.pix'));
+                    spans.forEach(s => (s.style.opacity = 1));
+                    const shuffled = spans.slice().sort(() => Math.random() - 0.5);
+                    shuffled.forEach((span, i) => {
+                        setTimeout(() => {
+                            span.style.opacity = '0';
+                        }, i * 1);
+                    });
+
+                    // After dissolve, populate overlay and reveal characters randomly (faster)
+                    const dissolveDelay = shuffled.length * 1 + 20;
+                    setTimeout(() => {
+                        overlayContent.innerHTML = wrapCharacters(bowtie);
+                        overlayContent.style.color = window.getComputedStyle(pre).color;
+                        bowtieOverlay.classList.add('show');
+
+                        const overlaySpans = Array.from(overlayContent.querySelectorAll('.pix'));
+                        overlaySpans.forEach(s => (s.style.opacity = 0));
+                        const shuffled2 = overlaySpans.slice().sort(() => Math.random() - 0.5);
+                        shuffled2.forEach((span, i) => {
+                            setTimeout(() => {
+                                span.style.opacity = '1';
+                            }, i * 1);
+                        });
+                    }, dissolveDelay);
+                });
+                
+                body.appendChild(div);
+            });
+        }
+
+        // Initialize
+        createBowties();
+    </script>
+</body>
+</html>

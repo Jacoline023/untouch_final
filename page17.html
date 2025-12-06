@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>between/</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000000;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .word {
+            font-family: 'Courier New', monospace;
+            font-size: 48px;
+            color: #ffffff;
+            position: relative;
+            animation: glitch-subtle 2s infinite;
+            display: inline-block;
+        }
+
+        .word:hover {
+            color: #ffffff;
+            cursor: default;
+            text-shadow: none;
+        }
+
+        .touch-link {
+            color: inherit;
+            text-decoration: underline;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .touch-link:hover {
+            color: #ffffff;
+            text-shadow: none;
+            animation: glitch-hover 0.35s steps(2, end) infinite;
+        }
+
+        /* Subtle glitch - only occasional flickers */
+        @keyframes glitch-subtle {
+            0%, 95% {
+                transform: translate(0);
+                text-shadow: none;
+            }
+            96% {
+                transform: translate(-1px, 1px);
+                text-shadow: 1px 0 #ff00ff, -1px 0 #00ffff;
+            }
+            97% {
+                transform: translate(1px, -1px);
+                text-shadow: -1px 0 #ff00ff, 1px 0 #00ffff;
+            }
+            98%, 100% {
+                transform: translate(0);
+                text-shadow: none;
+            }
+        }
+
+        @keyframes glitch-hover {
+            0% {
+                transform: translate(0);
+                text-shadow: none;
+            }
+            25% {
+                transform: translate(-1px, 0);
+                text-shadow: 1px 0 #ff00ff, -1px 0 #00ffff;
+            }
+            50% {
+                transform: translate(1px, 0);
+                text-shadow: -1px 0 #ff00ff, 1px 0 #00ffff;
+            }
+            75% {
+                transform: translate(-0.5px, 0);
+                text-shadow: 0.5px 0 #00ffff, -0.5px 0 #ff00ff;
+            }
+            100% {
+                transform: translate(0);
+                text-shadow: none;
+            }
+        }
+
+        /* Very subtle static - barely visible */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(255, 255, 255, 0.01) 2px,
+                    rgba(255, 255, 255, 0.01) 4px
+                );
+            pointer-events: none;
+            opacity: 0.1;
+        }
+    </style>
+</head>
+<body>
+    <div class="word">un<a class="touch-link" href="page18.html">touch</a></div>
+</body>
+</html>

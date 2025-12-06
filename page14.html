@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Spotlight Reveal</title>
+<style>
+    body {
+        margin: 0;
+        background: black;
+        font-family: "Courier New", monospace;
+        overflow: hidden;
+        color: #ffffff;
+    }
+
+    #backgroundLayer {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: row;
+        pointer-events: none;
+        opacity: 0.85;
+        overflow: visible;
+    }
+
+    /* Each ASCII block behaves independently */
+    #leftMan, #woman, #rightMan {
+        width: 33.33%;
+        height: 100%;
+        padding: 20px;
+        box-sizing: border-box;
+        overflow: visible; /* let beads spill beyond column */
+        font-size: 12px;
+        line-height: 12px;
+        white-space: pre;
+        display: inline-block;
+        vertical-align: top;
+    }
+
+    /* Push silhouettes outward */
+    #leftMan { transform: translateX(-180px); }
+    #rightMan { transform: translateX(40px); }
+
+    /* Flowing silhouette */
+    #woman span {
+        display: inline-block;
+        position: relative;
+        transition: transform 0.5s cubic-bezier(0.2, 0.85, 0.3, 1);
+        will-change: transform;
+        opacity: 0.5;
+    }
+
+    /* Hover / click prompts */
+    #promptLayer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 20;
+    }
+    .hitbox {
+        position: absolute;
+        top: calc(50% - 250px);
+        width: 33.33%;
+        height: 70%;
+        background: rgba(0,0,0,0.12);
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        outline: none;
+        pointer-events: auto;
+    }
+    #hitLeft { left: 0; transform: translate(-180px, 0); }
+    #hitRight { right: 0; transform: translate(40px, 0); }
+
+    .linePrompt {
+        position: absolute;
+        left: 50%;
+        bottom: 48%;
+        transform: translate(-50%, 0);
+        padding: 0;
+        font-size: 16px;
+        color: #ffffffcc;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        text-align: center;
+        max-width: 80%;
+        box-shadow: none;
+    }
+    #leftPrompt { left: 17%; }
+    #rightPrompt { left: 87%; bottom: 60%; }
+
+    .linePrompt.active {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        pointer-events: auto;
+        cursor: pointer;
+        box-shadow: none;
+    }
+
+    #shadeOverlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10;
+        --cutStart: 35vw;
+        --cutEnd: 65vw;
+        background: linear-gradient(
+            90deg,
+            rgba(0,0,0,0.92) 0%,
+            rgba(0,0,0,0.92) var(--cutStart),
+            rgba(0,0,0,0.0) calc(var(--cutStart) + 1px),
+            rgba(0,0,0,0.0) calc(var(--cutEnd) - 1px),
+            rgba(0,0,0,0.92) var(--cutEnd),
+            rgba(0,0,0,0.92) 100%
+        );
+        will-change: background;
+    }
+
+    #shadeLeft, #shadeRight {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        display: none; /* gradient overlay handles reveal */
+    }
+
+    #shadeLeft { left: 0; }
+    #shadeRight { right: 0; }
+
+    /* Ending overlay */
+    #endOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: #ffffff;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 30;
+        transition: opacity 1.6s ease, background 1.6s ease;
+        text-align: center;
+    }
+    #endOverlay.active {
+        opacity: 1;
+        background: #000;
+        pointer-events: auto;
+    }
+    #endMessage {
+        font-size: 24px;
+        letter-spacing: 1px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.8s ease;
+    }
+    #endOverlay.showTitle #endMessage {
+        opacity: 1;
+    }
+    #endChoices {
+        display: none;
+        gap: 32px;
+        font-size: 16px;
+    }
+    #endOverlay.showChoices #endChoices {
+        display: flex;
+    }
+    #endChoices a {
+        color: #ffffff;
+        text-decoration: none;
+        padding: 0;
+        border: none;
+    }
+</style>
+
+</head>
+<body>
+
+<div id="backgroundLayer">
+    
+    <!-- LEFT MAN -->
+    <pre id="leftMan">
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                             -++**=.                                   
+                                          =#%%@@@@@@%=.                                
+                                        .*%%%@@%@@@@@@@%=                              
+                                       .*%%##%%%@@%@@@@@%-                             
+                                       +####%##%##%%%%%%%=                             
+                                      -%%%%#**####*=-=-==                              
+                                      %#%%*--::+*+-:-==:                               
+                                      =%#+:.::.:-..::==.                               
+                                      -===:.... . .---::                               
+                                       -=+==--:....:-:--                               
+                                              :--..:--:..                              
+                                                .=-=++.  .                             
+                                                 .=++++. .:.                           
+                                                  =*====. .-                           
+                                                  .**+=+=...:                          
+                                                   :+*+++-..::                         
+                                                .::-===+++-.::                         
+                                              ....::--===+=:::.                        
+                                               ..::::---====::                         
+                                                  :::-------.                          
+                                                    .::::::                            
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                                                                       
+                                           .                                           
+                                         ..::                                          
+                                       ::::::..                                        
+                                      .::::::::.                                       
+                     ...            ..:::.:---=+=:                                     
+                     .:::.....   ....::.:...:::::::-.                                  
+                     .::::....  . :::.... ...:..::::-=.                                
+                      ::::......      ... ...  ...:.:::=-.                             
+                      .::::.................. ........::::-.                           
+                        ::::...............     .........:::-:.                        
+                          .:::......    ............ ......::::-.                      
+                             .:::::...  ............ .. ...::.:::.                     
+                                  ................ ... .......:::.                     
+                                          ....................::::                     
+                                                ..::.......:::::::.                    
+                                                  --::::::..:::::                      
+                                                 :--:-..:..:::::                       
+                                               .:::.......::::.                        
+                                              .:::........:::.                         
+                                             ::::.......:::.                           
+                                           :::::......::::.                            
+                                          .:::.......:.::                              
+                                         .:-::.....::::.                               
+                                        .:::....::::....                               
+                                       :-:-...::::..::.                                
+                                    .. :::.:.::::.::.                                  
+                                    .  ...:::::::::.                                   
+                                    .     ..:::.:.                                     
+                                      .    .:::.                                       
+                                            :-::.                                      
+                                           .:-: :                                      
+                                           .:::. :                                     
+                                           :.::-...                                    
+                                              :   :.                                   
+                                                                                       
+                                                                                     
+    </pre>
+
+    <!-- WOMAN IN THE CENTER -->
+    <pre id="woman">
+                                                     
+                                                     
+                                                     
+                                                     
+                                                     
+                   .#@@@=.==--+**                    
+                  .+%@@@@#=%%%#@#+**.                
+                :=*#*+%@@%@@@@@@@@%*:                
+             -*@@@@@@@@@@@#+++**#@@%#--++:           
+           .#@%##@@@@@@@@*....:::-*@@@@@@@#          
+            *%@@@@@@@@@@#...--.:--+@@@@@@#.          
+          .--*@@@@@@@@@%:...:...++*@@@@@@#           
+            +%##@@@@@@:..   ...:--=@@@@@@#.          
+           =+#@@@@@@@@*..    .:--:=@@@@@@%+          
+           -#@@@@@@@@@@@:     .::-=#@@@@@%#          
+          .*#*#@@@@@@@@@-  ....:-::.:@@%=.           
+           =@@@@@@@@@@@@:   ..-+@@%-.:@@@+           
+            :.        -:.. ..:=#@--.  .+*.           
+                       .:..::-=*+.    .::            
+                   .      ......  .   .              
+                           .       .. ..             
+          .....        . ....       :. .:            
+         .......                     . ...           
+       ....::..                       ...:.          
+      ...:::.                         ...::.         
+     ..::::.                         ::...::         
+     .:-=-                           +:...::.        
+    ...:=:                           ::...:.         
+     ...-=.                             ...          
+      ..:--                                          
+       ..:-:                                         
+        ..::.                                        
+         ..::.                                       
+           ..:.                                      
+            .:::                                     
+             .....                                   
+              ..-..                                  
+              ....                                   
+              ..:..                                  
+              ::--+*#***++==-====-----=              
+             +##=*#@@@@@@@@@%@@@@@@@@@%:             
+             #%@@@@@@@@@@@@@%@@@@@@@@@@-             
+             #%@@@@@@@@@@@@@@@@@@@@@@@@-             
+             +%%@@%@@@@@@@@@@@@@@@@@@@%.             
+             .#%%%%%@@@@@@@@@@@@@@@@@@*              
+              =%%%%%%%@@@@@@@@@@@@@@@%               
+               +%%%%%%@@@@@@@@@@@@@@@=               
+                *%%%%%@@@@@@@@@@@@@@#                
+                 *%%%%%@@@@@@@@@@@@@                 
+                  #%%%%@@@@@@@@@@@@=                 
+                  .%%%%@@@@@@@@@@@%                  
+                   +@@%@@@@@@@@@@@-                  
+                    #@@@%@@@@@@@@#                   
+                    =@@@%%@@@@@@@=                   
+                     %@@%%@@@@@@%                    
+                     :%%%%@@@@@@@                    
+                      @@%%%@@@%@#                    
+                      %@@%%@@@@@-                    
+                      -%@@@@@@@@.                    
+                       %@@@@@@@%*                    
+                       =%@@@@@@+.                    
+                       .-+*=.....                    
+                       ..........                    
+                       ..........                    
+                       ..........                    
+                       ..........                    
+                       ...:-...::                    
+                      ...:-+:..:-:                   
+                      ..::++-:.:::                   
+                      ..:-+=:-::::.                  
+                     +-.:-++.::::.                   
+                     ..: ...  .  ..                  
+                     ...  ..                         
+                            .:-:   .                 
+                              :.  ..                 
+                            ++=-:..                  
+                                                     
+                                                     
+    </pre>
+
+    <!-- RIGHT MAN -->
+    <pre id="rightMan">
+                          :%@@@@@@@@=                          
+                         :@@@%#=..-+%#                         
+                         +%#*=-:....:-.                        
+                         --=-:.......::::.:..                  
+                         :.......:--:--::-:...                 
+                        .-.::.......:::-:......                
+                        ...--:....::.     .:.....              
+                       ....=*+-::-=-.        ::.....           
+                      ......-*#*--=.         ..::.....         
+         .::.....    ........-+**+:.:.          .-:.....       
+        ::.......    ........:--+*+:.......   ..:-+-:.....     
+       ::.......     ........     ................:---:..:..   
+      .:........                   ......................::.   
+     .:......:..                    ..:-:..................    
+     ......:-=.                     .:--::..............       
+    .......:++                       ..                        
+   .......:+=.                                                 
+  ........::.                                                  
+  .:......                                                     
+ .:...:::                                                      
+ :::::-:                                                       
+ ::::::.                                                       
+ ::::.....                                                     
+  .::::....                                                    
+    .:::::.....                                                
+       .:::::.....                                             
+          ..:::.......:..                                      
+              ..::......                                       
+                 :::..::::.                                    
+                  .::::::..                                    
+                     .::..                                     
+             .:::..:..         ..:...                          
+            .:...::::...:::...::::--::                         
+            .:::::::::.:::..:...:::..:.                        
+           ::.::::.:-----:::.:.:::......                       
+           ::.:::::.::--------:::......                        
+           .::::::.::-=====----::::::....:                     
+           .::::::::.:-========-::::::....                     
+           :::::::::::--=++====-::::::::..                     
+           --:::::::::---=======-:::::::...                    
+           :=:::::::::-=++=++=-==-:::::::...                   
+           .+:::::::::-=++=--==--=----::::...                  
+            +-:::::::--===-..--+--=-::::::::.                  
+            +-:::::::--=-    :--+=---=-::::...                 
+            --::--::::-:      ::====------::..                 
+            -=:----:---.       .--==--=---:::::                
+            :=:--------.         --==------::::                
+            -=:::------:         :==++=-==----:.               
+            =-::::::--=-        :=+**-===-===--.               
+            -:=::----===        ---=+++=--===--                
+            :=+-:--=====.      :-====++=======.                
+            .==---=====-.      :=-:::--===---.                 
+             --=--------.      :-:----=====-                   
+             ::-----:--=.     :---=--------                    
+             ::-----:--=:    -===--------:                     
+             :::--=----=.   -==+==-=---=:                      
+             ------==---  .=====--=--==-                       
+             ------====-..-==+===-===--.                       
+             :=------=======+=+===-===.                        
+             .:+---=-==-:=====++==--:                          
+              :-=--=+=:  ::---===+=-                           
+              :==--=++- .:..:-----.                            
+              ------=+=. ::...:--.                             
+              :+------==. .::..::                              
+               -=-====+=.  .::...                              
+               .--==-==-.   ::...                              
+                 .-::---     ::...                             
+                 .::::.       .-:.                             
+                 .:::.          .::                            
+                 :-::.                                         
+                .--::.                                         
+                .:-:.                                          
+                ...    </pre>
+
+</div>
+
+<!-- Hover/click overlay -->
+<div id="promptLayer">
+    <div id="hitLeft" class="hitbox"></div>
+    <div id="hitRight" class="hitbox"></div>
+    <div id="leftPrompt" class="linePrompt"></div>
+    <div id="rightPrompt" class="linePrompt"></div>
+</div>
+
+<!-- Ending overlay -->
+<div id="endOverlay">
+    <div id="endMessage">the unspoken rival</div>
+    <div id="endChoices">
+        <a href="page15.html">drink with him</a>
+        <a href="page15.html">right him</a>
+    </div>
+</div>
+
+<!-- DARK OVERLAY -->
+<div id="shadeOverlay">
+    <div id="shadeLeft"></div>
+    <div id="shadeRight"></div>
+</div>
+
+<script>
+    /* -------------------------------
+       Spotlight Window Logic
+    --------------------------------*/
+    const shadeLeft  = document.getElementById("shadeLeft");
+    const shadeRight = document.getElementById("shadeRight");
+    const shadeOverlay = document.getElementById("shadeOverlay");
+    const womanEl = document.getElementById("woman");
+    let scatterShift = 0;
+
+    const WINDOW_WIDTH = 280;  
+
+    let targetX = window.innerWidth / 2;
+    let currentX = targetX;
+    // Disable gradient overlay animation to avoid lag
+    shadeOverlay.style.display = "none";
+
+    /* ----------------------------------
+       Bead scatter effect
+    -----------------------------------*/
+    let scatterTarget = 0;   // desired scatter based on cursor (-1 right, 0 center, 1 left)
+    let scatterFactor = 0;   // smoothed signed scatter
+    let waveTime = 0;
+    function setScatterTarget(x) {
+        const mid = window.innerWidth * 0.5;
+        scatterTarget = Math.max(-1, Math.min(1, (mid - x) / mid)); // left = 1, right = -1
+    }
+    setScatterTarget(window.innerWidth / 2);
+
+    // Smooth, light inertia so beads feel veil-like but responsive
+    function animateScatter() {
+        const mid = window.innerWidth * 0.5;
+        scatterFactor += (scatterTarget - scatterFactor) * 0.32; // faster follow
+        const targetShift = -scatterFactor * mid * 0.65;
+        scatterShift += (targetShift - scatterShift) * 0.28;     // tiny inertia
+        waveTime += 0.016;
+        requestAnimationFrame(animateScatter);
+    }
+    animateScatter();
+
+    document.addEventListener("mousemove", e => {
+        targetX = e.clientX;
+        setScatterTarget(e.clientX);
+        setEdgeTargets(e.clientX);
+    });
+    document.addEventListener("touchmove", e => {
+        if (e.touches.length > 0) {
+            const tx = e.touches[0].clientX;
+            targetX = tx;
+            setScatterTarget(tx);
+            setEdgeTargets(tx);
+        }
+    }, { passive: true });
+
+    window.addEventListener("resize", () => {
+        targetX = window.innerWidth / 2;
+        setScatterTarget(targetX);
+        setEdgeTargets(targetX);
+    });
+
+    /* ----------------------------------
+       Edge-reveal cue for left/right men
+    -----------------------------------*/
+    const leftEl = document.getElementById("leftMan");
+    const rightEl = document.getElementById("rightMan");
+    let leftTarget = 0, rightTarget = 0;
+    let leftVis = 0, rightVis = 0;
+
+    function setEdgeTargets(x) {
+        const nx = x / window.innerWidth;
+        leftTarget = Math.max(0, Math.min(1, (0.5 - nx) / 0.5));   // 1 at far left, 0 at center/right
+        rightTarget = Math.max(0, Math.min(1, (nx - 0.5) / 0.5));  // 1 at far right, 0 at center/left
+    }
+    setEdgeTargets(window.innerWidth / 2);
+
+    function animateEdges() {
+        leftVis += (leftTarget - leftVis) * 0.28;
+        rightVis += (rightTarget - rightVis) * 0.28;
+
+        leftEl.style.opacity = 0.1 + leftVis * 0.9;
+        rightEl.style.opacity = 0.1 + rightVis * 0.9;
+
+        leftEl.style.filter = `blur(${(1 - leftVis) * 1.6}px)`;
+        rightEl.style.filter = `blur(${(1 - rightVis) * 1.6}px)`;
+
+        requestAnimationFrame(animateEdges);
+    }
+    animateEdges();
+
+    /* ----------------------------------
+       Prompt shuttle between the two men
+    -----------------------------------*/
+    const hitLeft = document.getElementById("hitLeft");
+    const hitRight = document.getElementById("hitRight");
+    const leftPrompt = document.getElementById("leftPrompt");
+    const rightPrompt = document.getElementById("rightPrompt");
+    const endOverlay = document.getElementById("endOverlay");
+    const endMessage = document.getElementById("endMessage");
+    const endChoices = document.getElementById("endChoices");
+
+    const promptLines = [
+        { side: "left",  text: "who is it you wait for?" },
+        { side: "right", text: "where does your heart go at night?" },
+        { side: "left",  text: "whose longing pulls you back, again and again?" },
+        { side: "right", text: "where is the place your soul leans toward?" },
+        { side: "left",  text: "if he called… would you go to him?" },
+        { side: "right", text: "…would you?" }
+    ];
+
+    let promptIndex = 0;
+    let promptsDone = false;
+
+    function triggerEnding() {
+        promptsDone = true;
+        clearPrompts();
+        endOverlay.classList.add("active");
+        // hold at black before showing title
+        setTimeout(() => {
+            endOverlay.classList.add("showTitle");
+        }, 2000);
+    }
+
+    function clearPrompts() {
+        leftPrompt.classList.remove("active");
+        rightPrompt.classList.remove("active");
+    }
+
+    function showPrompt(side) {
+        if (promptsDone) return;
+        const current = promptLines[promptIndex];
+        if (current.side !== side) return;
+
+        clearPrompts();
+        const el = side === "left" ? leftPrompt : rightPrompt;
+        el.textContent = current.text;
+        el.classList.add("active");
+    }
+
+    function advancePrompt(side) {
+        if (promptsDone) return;
+        const current = promptLines[promptIndex];
+        if (current.side !== side) return;
+        clearPrompts();
+        promptIndex += 1;
+        if (promptIndex >= promptLines.length) {
+            triggerEnding();
+        }
+    }
+
+    hitLeft.addEventListener("mouseenter", () => showPrompt("left"));
+    hitRight.addEventListener("mouseenter", () => showPrompt("right"));
+
+    hitLeft.addEventListener("mouseleave", clearPrompts);
+    hitRight.addEventListener("mouseleave", clearPrompts);
+
+    leftPrompt.addEventListener("click", () => advancePrompt("left"));
+    rightPrompt.addEventListener("click", () => advancePrompt("right"));
+
+    endMessage.addEventListener("click", () => {
+        endMessage.style.display = "none";
+        endOverlay.classList.add("showChoices");
+        endChoices.innerHTML = `
+            <a href="page15.html">[drink with him]</a>
+            <a href="page15.html">[fight him]</a>
+        `;
+    });
+
+    /* ----------------------------------
+       Bead particle drift (woman + right man)
+    -----------------------------------*/
+
+    function buildFlowSpans(el, spread = 200, drop = 110) {
+        const text = el.innerText;
+        el.innerHTML = "";
+        const frag = document.createDocumentFragment();
+        for (let i = 0, row = 0, col = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (ch === "\n") {
+                frag.appendChild(document.createElement("br"));
+                row += 1;
+                col = 0;
+            } else {
+                const span = document.createElement("span");
+                span.textContent = ch;
+                span.dataset.sx = (Math.random() - 0.5) * spread; // symmetric base scatter
+                span.dataset.sy = Math.random() * drop;           // downward bias
+                span.dataset.row = row;
+                span.dataset.col = col;
+                span.dataset.phase = (col * 0.15 + row * 0.28).toFixed(4);
+                span.style.position = "relative";
+                frag.appendChild(span);
+                col += 1;
+            }
+        }
+        el.appendChild(frag);
+        return Array.from(el.querySelectorAll("span"));
+    }
+
+    const flowGlyphGroups = [
+        buildFlowSpans(womanEl, 200, 110)
+    ];
+
+    const CREST_PULL = 80;   // stronger outward pull
+    const ROLL_MAG = 36;
+    const DOWNWARD = 26;
+    const SCATTER_STRETCH = 1.2; // amplifies scatter when far left
+
+    function waveBrush() {
+        const absScatter = Math.abs(scatterFactor);
+        const phaseScale = 1 + absScatter * 0.6;
+        const ampX = absScatter * CREST_PULL * (1 + absScatter * 0.4);
+        const ampY = absScatter * 14;
+        const commonPhase = waveTime * 1.5;
+        const swellAll = Math.sin(commonPhase);
+        const rippleAll = Math.cos(commonPhase * 0.7 + absScatter * 0.8);
+
+        for (let g = 0; g < flowGlyphGroups.length; g++) {
+            const spans = flowGlyphGroups[g];
+            for (let i = 0; i < spans.length; i++) {
+                const span = spans[i];
+                const baseX = (parseFloat(span.dataset.sx) || 0) * (1 + absScatter * SCATTER_STRETCH);
+                const baseY = parseFloat(span.dataset.sy) || 0;
+                const basePhase = parseFloat(span.dataset.phase) || 0;
+
+                const phase = basePhase * phaseScale + waveTime * 1.4;
+                const swell = Math.sin(phase);
+                const ripple = Math.cos(phase * 0.7 + absScatter * 0.8);
+
+                const driftX = scatterFactor * baseX + scatterShift;
+                const tx = driftX + swell * ampX + ripple * ROLL_MAG * absScatter;
+                const ty = absScatter * baseY + swell * ampY + absScatter * absScatter * DOWNWARD;
+
+                span.style.transform = `translate(${tx}px, ${ty}px)`;
+            }
+        }
+
+        requestAnimationFrame(waveBrush);
+    }
+
+    waveBrush();
+</script>
+
+</body>
+
+</html>

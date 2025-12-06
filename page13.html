@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>she returns to his embrace</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    overflow: hidden;
+    font-family: "Courier New", monospace;
+  }
+
+  #girl {
+    position: absolute;
+    white-space: pre;
+    font-size: 10px;
+    color: #ffffffd0;
+    opacity: 0.9;
+    line-height: 10px;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: color 0.2s ease, opacity 0.5s ease;
+  }
+
+  #girl.highlight {
+    color: #ffccccdd;
+  }
+
+  #girlHitbox {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    z-index: 10;
+  }
+
+  /* Poem container */
+  #wordBox {
+    position: fixed;
+    top: 40%;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .wordLine {
+    font-size: 20px; /* your update */
+    color: #ffffffee;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+    line-height: 36px;
+
+    position:relative;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Visual cue when poem becomes clickable */
+#wordBox.clickable .wordLine {
+  color: #ffffffdd;                  /* almost white, calm */
+  animation: softShake 1.6s infinite ease-in-out;
+}
+
+@keyframes softShake {
+  0%   { transform: translateX(-50%) translateY(0px); opacity: 1; }
+  20%  { transform: translateX(calc(-50% + 0.6px)) translateY(0.3px); opacity: 0.97; }
+  40%  { transform: translateX(calc(-50% - 0.4px)) translateY(-0.4px); opacity: 0.94; }
+  60%  { transform: translateX(calc(-50% + 0.3px)) translateY(0.2px); opacity: 0.96; }
+  80%  { transform: translateX(calc(-50% - 0.5px)) translateY(0px); opacity: 0.98; }
+  100% { transform: translateX(-50%) translateY(0px); opacity: 1; }
+}
+
+  @keyframes glitchFlicker {
+    0% { opacity: 1; }
+    100% { opacity: 0.75; }
+  }
+
+</style>
+</head>
+
+<body>
+
+<!-- FLOATING ASCII -->
+<pre id="girl">
+                                                            
+                                  ++++                       
+                                --+-*+.                      
+               =*+*+.          =****=*:                      
+              .******-        +*+***+*:                      
+              -***+***+      +***+++**+                      
+              =#***=+=*+-   =*+=**=++++=                     
+              =*-=##*+***+-:+***###**=+*-                    
+              ::##**+++++***+##+*+++*+****.                  
+              .##+=+=++++++#*==++++++=+**#*:                 
+               ===##+++=+++=*##*+++==+++=+#*                 
+                +*#++*==++*#+++*++=+++==+##.                 
+                 *#++++++=*#+++*++++===*#*.  .::.            
+                  -#+++*+=+#+++*++===+##=:-+**##**=          
+                   -#++++=+#+++*+===***-+====+==+***:        
+                   ..*+++++#+++++=+##**===+===+===+**.       
+                     .-*+++#+++++##+=*=+=+++==++===+*+       
+                 :...  .+++*+++#+====-======+*++++++#+       
+                        .:*#*+*+======++**+========+**.      
+                          :+###*=-----------====+++**+.      
+                            =###+==-------=++=====***+       
+                              .=##+..:-====---==++**+        
+                                  .*#+.     ..:--=-.         
+                                      :-                     
+                        
+                                                             </pre>
+
+<!-- Invisible click area -->
+<div id="girlHitbox"></div>
+
+<!-- Center poem -->
+<div id="wordBox"></div>
+
+<script>
+/* ---------------------------
+   FLOATING SILHOUETTE LOGIC
+--------------------------- */
+
+const girl = document.getElementById("girl");
+const hitbox = document.getElementById("girlHitbox");
+const wordBox = document.getElementById("wordBox");
+
+let gx = window.innerWidth * 0.5;
+let gy = window.innerHeight * 0.5;
+let vx = 0, vy = 0;
+
+let flutterTime = 0;
+
+const repelRadius = 180;
+const repelStrength = 1.0;
+
+document.addEventListener("mousemove", (e) => {
+  const dx = gx - e.clientX;
+  const dy = gy - e.clientY;
+  const dist = Math.hypot(dx, dy);
+
+  // highlight when cursor is near
+  if (dist < repelRadius + 40) {
+    girl.classList.add("highlight");
+  } else {
+    girl.classList.remove("highlight");
+  }
+
+  // magnetic repulsion (same as before)
+  if (dist < repelRadius) {
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const force = (repelRadius - dist) / repelRadius;
+    vx += ux * repelStrength * force;
+    vy += uy * repelStrength * force;
+  }
+  
+  // === NEW: gentle attraction to cursor if silhouette is too far ===
+  const farThreshold = 600; 
+  if (dist > farThreshold) {
+    vx -= dx * 0.0008; 
+    vy -= dy * 0.0008;
+  }
+});
+
+function animate() {
+  flutterTime += 0.016; // smooth time progress
+
+  // flutter motion components
+  const flutterX = Math.sin(flutterTime * 1.2) * 0.6;   // small sideways sway
+  const flutterY = Math.cos(flutterTime * 0.8) * 0.4;   // slight vertical drift
+  const noiseX = (Math.random() - 0.5) * 0.15;          // tiny organic jitter
+  const noiseY = (Math.random() - 0.5) * 0.15;
+
+  // apply movement
+  gx += vx + flutterX + noiseX;
+  gy += vy + flutterY + noiseY;
+
+  // inertia
+  vx *= 0.96;
+  vy *= 0.96;
+
+  // keep her away from edges but not stuck
+  const margin = 80;
+
+  if (gx < margin) vx += 0.8;
+  if (gx > window.innerWidth - margin) vx -= 0.8;
+
+  if (gy < margin) vy += 0.8;
+  if (gy > window.innerHeight - margin) vy -= 0.8;
+
+  // update silhouette + hitbox
+  girl.style.left = gx + "px";
+  girl.style.top = gy + "px";
+
+  hitbox.style.left = gx + "px";
+  hitbox.style.top = gy + "px";
+
+  requestAnimationFrame(animate);
+}
+animate();
+
+/* ---------------------------
+   WORDS & FADE LOGIC
+--------------------------- */
+
+const phrase = ["she", "returns", "to", "his", "embrace"];
+let clickCount = 0;
+
+hitbox.addEventListener("click", () => {
+  if (clickCount >= phrase.length) return;
+
+  /* fade silhouette slightly */
+  const newOpacity = Math.max(0, 0.9 - clickCount * 0.16);
+  girl.style.opacity = newOpacity;
+
+  /* add next poem word */
+  const line = document.createElement("div");
+  line.className = "wordLine";
+  line.textContent = phrase[clickCount];
+  wordBox.appendChild(line);
+
+  // fade in
+  requestAnimationFrame(() => {
+    line.style.opacity = "1";
+  });
+
+  clickCount++;
+
+  /* When all 5 words are clicked */
+if (clickCount === 5) {
+  // fade silhouette away
+  setTimeout(() => {
+    girl.style.opacity = "0";
+  }, 1000);
+
+  // WAIT 1s before poem becomes clickable
+  setTimeout(() => {
+    wordBox.classList.add("clickable");
+    wordBox.style.pointerEvents = "auto";
+    wordBox.style.cursor = "pointer";
+
+
+    wordBox.addEventListener("click", () => {
+      window.location.href = "page14.html";
+    }, { once: true });
+
+  }, 1000);
+}
+});
+</script>
+
+</body>
+</html>

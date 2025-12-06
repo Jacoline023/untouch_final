@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Body Map — Queer Panic</title>
+
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        color: #f2f2f2;
+        overflow: hidden;
+        font-family: "Courier New", monospace;
+    }
+
+    .word {
+        position: absolute;
+        cursor: pointer;
+        font-size: 16px;
+        opacity: 0.9;
+        transition: opacity 0.3s ease;
+        white-space: nowrap;
+        display: inline-block;
+        animation: pulse var(--pulse-duration, 0.9s) infinite ease-in-out alternate;
+        animation-delay: var(--pulse-delay, 0s);
+    }
+
+    /* pulse = slight stretch + slight jitter */
+    @keyframes pulse {
+        0%   { transform: scale(1, 1) translate(0px, 0px); }
+        40%  { transform: scale(1.02, 1.06) translate(0px, -1px); }
+        70%  { transform: scale(0.98, 0.94) translate(0px, 1px); }
+        100% { transform: scale(1.01, 1.02) translate(0px, -0.5px); }
+    }
+
+    .word.used {
+        text-decoration: line-through;
+        opacity: 0.45;
+        pointer-events: none;
+        animation: none;
+    }
+
+    .reveal {
+        position: absolute;
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        max-width: 280px;
+        line-height: 1.4em;
+        text-align: center;
+    }
+
+    body.glitching .reveal {
+        opacity: 0.45 !important;
+        transition: opacity 0.6s ease;
+    }
+
+    #final {
+        position: absolute;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 18px;
+        opacity: 0;
+        white-space: nowrap;
+        pointer-events: none;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    #final.ready {
+        pointer-events: auto;
+        cursor: pointer;
+        text-decoration: underline;
+    }
+</style>
+</head>
+
+<body>
+
+<!-- scattered words -->
+<div class="word" data-part="hand" style="top: 20%; left: 12%;">hand</div>
+<div class="word" data-part="bare-arm" style="top: 40%; left: 72%;">bare arm</div>
+<div class="word" data-part="heart" style="top: 62%; left: 28%;">heart</div>
+<div class="word" data-part="leg" style="top: 32%; left: 50%;">leg</div>
+<div class="word" data-part="mouth" style="top: 70%; left: 60%;">mouth</div>
+<div class="word" data-part="nose" style="top: 14%; left: 82%;">nose</div>
+
+<!-- reveal text -->
+<div id="rev-hand" class="reveal"></div>
+<div id="rev-bare-arm" class="reveal"></div>
+<div id="rev-heart" class="reveal"></div>
+<div id="rev-leg" class="reveal"></div>
+<div id="rev-mouth" class="reveal"></div>
+<div id="rev-nose" class="reveal"></div>
+
+<!-- final glitch -->
+<a id="final" href="page16.html">the body knows better.</a>
+
+<script>
+    const lines = {
+        "hand": "the hand that held her steadied you first.",
+        "bare-arm": "her warmth lingered on his arm, and somehow on yours.",
+        "heart": "the heart she listens for echoes a rhythm.",
+        "leg": "the legs that carried her home moved toward you.",
+        "mouth": "her name on his lips sounds strangely like your own silence.",
+        "nose": "she knew his scent first, and you breathe it in."
+    };
+
+    const clicked = new Set();
+    const words = document.querySelectorAll(".word");
+    const revealed = new Set();
+    const revealDelay = 320;
+    const glitchDelay = 1000;
+    let glitchScheduled = false;
+    const finalText = "the body knows better.";
+
+    words.forEach(word => {
+        // Give each word its own pulse tempo and starting phase
+        const part = word.getAttribute("data-part");
+        const duration = part === "heart" ? 0.45 : 0.65 + Math.random() * 1.2;
+        const phaseShift = Math.random() * duration;
+        word.style.setProperty("--pulse-duration", `${duration.toFixed(2)}s`);
+        word.style.setProperty("--pulse-delay", `${(-phaseShift).toFixed(2)}s`);
+
+        word.addEventListener("click", () => {
+            const part = word.getAttribute("data-part");
+
+            word.classList.add("used");
+            clicked.add(part);
+
+            const reveal = document.getElementById("rev-" + part);
+            reveal.textContent = lines[part];
+
+            const rect = word.getBoundingClientRect();
+            reveal.style.top = (rect.top + rect.height + 6) + "px";
+            const centeredLeft = rect.left + rect.width / 2 - reveal.offsetWidth / 2;
+            reveal.style.left = centeredLeft + "px";
+            reveal.style.opacity = 0;
+
+            setTimeout(() => {
+                reveal.style.opacity = 1;
+                revealed.add(part);
+
+                if (clicked.size === 6 && revealed.size === 6 && !glitchScheduled) {
+                    glitchScheduled = true;
+                    setTimeout(() => {
+                        document.body.classList.add("glitching");
+                        startGlitch();
+                    }, glitchDelay);
+                }
+            }, revealDelay);
+        });
+    });
+
+    function startGlitch() {
+        // Force reveal opacity to match crossed-out words during glitch
+        document.querySelectorAll(".reveal").forEach(r => r.style.opacity = "0.45");
+
+        const final = document.getElementById("final");
+        final.style.opacity = 1;
+
+        const glitchSeq = [
+            "the bo–",
+            "the b0–",
+            "the bod—",
+            "the bod%",
+            "the bod%#!",
+            "the body k–",
+            "the body k^@",
+            "the body kn—",
+            "the body know$*",
+            "the body know—",
+            "the body knowss–",
+            "the body knows b–",
+            "the body knows b#@",
+            "the body knows be—",
+            "the body knows bet–",
+            "the body knows bet!!",
+            "the body knows bett–",
+            "the body knows bett$%",
+            "the body knows bette–",
+            "the body knows bette#",
+            finalText
+        ];
+
+        let i = 0;
+
+        function cycle() {
+            final.textContent = glitchSeq[i];
+            i++;
+            if (i < glitchSeq.length) {
+                setTimeout(cycle, 90 + Math.random() * 120);
+            } else {
+                final.textContent = finalText;
+                final.classList.add("ready");
+            }
+        }
+        cycle();
+    }
+</script>
+
+</body>
+</html>

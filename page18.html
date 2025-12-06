@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>touch</title>
+
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background: #000000;
+        color: #f5f5f5;
+        font-family: "Courier New", monospace;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    #wrapper {
+        text-align: center;
+        white-space: pre;
+        font-size: 18px;
+        line-height: 1.6;
+        width: 100%;
+    }
+
+    .choice {
+        cursor: pointer;
+        display: inline-block;
+        margin: 0 40px;
+        padding: 4px 10px;
+        transition: opacity 0.3s ease;
+    }
+    .choice:hover {
+        opacity: 0.7;
+        text-decoration: underline;
+    }
+    .choice.disabled {
+        pointer-events: none;
+        opacity: 0.3;
+        cursor: default;
+        text-decoration: none;
+    }
+
+    #output {
+        margin: 40px auto 0 auto;
+        font-size: 15px;
+        white-space: pre-wrap;
+        text-align: left;
+        display: inline-block;
+        width: 80%;
+        max-width: 760px;
+        padding: 18px 22px;
+        background: rgba(0, 0, 0, 0.65);
+        min-height: 200px;
+        max-height: 65vh;
+        overflow-y: auto;
+    }
+
+    /* terminal colors */
+    .green { color: #33FF33; }
+    .yellow { color: #E6E67A; }
+    .red { color: #FF5555; }
+
+    /* blinking cursor */
+    #cursor {
+        display: none;
+        width: 0.65em;
+        height: 1em;
+        background: #f5f5f5;
+        animation: blink 0.6s steps(2, start) infinite;
+        vertical-align: bottom;
+    }
+
+    @keyframes blink {
+        to { visibility: hidden; }
+    }
+
+    /* terminal input */
+    .prompt-line {
+        display: flex;
+        align-items: center;
+    }
+    
+    .prompt-symbol {
+        color: #f5f5f5;
+        margin-right: 0;
+    }
+    
+    #terminal-input {
+        background: transparent;
+        border: none;
+        outline: none;
+        color: #f5f5f5;
+        font-family: "Courier New", monospace;
+        font-size: 15px;
+        width: 200px;
+        caret-color: #f5f5f5;
+    }
+    
+    #terminal-input.error {
+        animation: flash-red 0.15s ease 2;
+    }
+    
+    @keyframes flash-red {
+        0%, 100% { background: transparent; }
+        50% { background: rgba(255, 85, 85, 0.4); }
+    }
+</style>
+</head>
+
+<body>
+
+<div id="wrapper">
+
+-> <span class="choice" id="choice-her">her</span>
+-> <span class="choice" id="choice-him">him</span>
+
+<div id="output"></div>
+<div id="cursor"></div>
+
+</div>
+
+<script>
+const out = document.getElementById("output");
+const cursor = document.getElementById("cursor");
+let locked = false;
+
+/* ----------------- TYPEWRITER ----------------- */
+
+// More nuanced delay based on context
+function charDelay(ch, prevCh, nextCh, posInWord) {
+    // System/code lines type faster (machine output feel)
+    const isSystemChar = /[.\[\]{}()<>\/\\|=]/.test(ch);
+    
+    if (isSystemChar) {
+        // Fast, uniform for "machine" output
+        return 8 + Math.random() * 12;
+    }
+    
+    // Human typing patterns
+    let base = 28 + Math.random() * 35;
+    
+    // Slower at word boundaries
+    if (ch === " ") return base + 40 + Math.random() * 30;
+    
+    // Pause after sentence-ending punctuation
+    if (".,;:!?".includes(prevCh)) return base + 60;
+    
+    // Slight hesitation before punctuation (thinking)
+    if (".,;:!?".includes(nextCh)) return base + 15;
+    
+    // Faster mid-word (flow state)
+    if (posInWord > 2 && posInWord < 8) return base * 0.7;
+    
+    // Slight slowdown at word start
+    if (posInWord === 0) return base + 20;
+    
+    // Em-dash pause (dramatic)
+    if (ch === "—" || (ch === "-" && prevCh === "-")) return base + 100;
+    
+    return base;
+}
+
+function moveCursor(target) {
+    target.appendChild(cursor);
+    // Auto-scroll to keep cursor visible
+    out.scrollTop = out.scrollHeight;
+}
+
+function typeLine(line, isSystemLine = false) {
+    const isObject = typeof line === "object" && line !== null;
+    const content = isObject ? (line.text || "") : (line || "");
+    const colorClass = isObject ? line.color : null;
+    
+    // Detect if this is a "system" line (brackets, dots sequences, technical)
+    const looksLikeSystem = colorClass || /^\[|\.{3,}|ERROR|OK|FAILED/.test(content);
+
+    const lineEl = document.createElement("div");
+    out.appendChild(lineEl);
+    moveCursor(lineEl);
+
+    return new Promise(resolve => {
+        if (content.length === 0) {
+            if (colorClass) lineEl.classList.add(colorClass);
+            resolve();
+            return;
+        }
+
+        let idx = 0;
+        let posInWord = 0;
+        
+        function nextChar() {
+            if (idx < content.length) {
+                const ch = content[idx];
+                const prevCh = idx > 0 ? content[idx - 1] : "";
+                const nextCh = idx < content.length - 1 ? content[idx + 1] : "";
+                
+                // Track position within word
+                if (ch === " " || ch === "\n") {
+                    posInWord = 0;
+                } else {
+                    posInWord++;
+                }
+                
+                lineEl.textContent += ch;
+                moveCursor(lineEl);
+                idx++;
+                
+                // System lines can also do burst typing (2-4 chars at once occasionally)
+                if (looksLikeSystem && Math.random() < 0.3 && idx < content.length - 2) {
+                    const burstLen = Math.floor(Math.random() * 3) + 1;
+                    for (let b = 0; b < burstLen && idx < content.length; b++) {
+                        lineEl.textContent += content[idx];
+                        idx++;
+                        posInWord++;
+                    }
+                    moveCursor(lineEl);
+                }
+                
+                const delay = charDelay(ch, prevCh, nextCh, posInWord);
+                setTimeout(nextChar, delay);
+            } else {
+                if (colorClass) lineEl.classList.add(colorClass);
+                resolve();
+            }
+        }
+        nextChar();
+    });
+}
+
+async function typeSequence(lines, delayBetween=250) {
+    out.innerHTML = "";
+    cursor.style.display = "inline-block";
+    moveCursor(out);
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const isObject = typeof line === "object" && line !== null;
+        const content = isObject ? (line.text || "") : (line || "");
+        const colorClass = isObject ? line.color : null;
+        
+        // Detect line type for appropriate pacing
+        const isSystemLine = colorClass || /^\[|\.{3,}|ERROR|OK|FAILED|halt/.test(content);
+        const isEmptyLine = content.trim().length === 0;
+        const isPoeticLine = !isSystemLine && content.length > 0 && !content.includes("---");
+        
+        await typeLine(line, isSystemLine);
+        
+        if (isEmptyLine) {
+            // Brief pause for empty lines (visual breath)
+            await new Promise(r => setTimeout(r, 120 + Math.random() * 80));
+        } else if (isSystemLine) {
+            // Quick between system lines (machine rhythm)
+            await new Promise(r => setTimeout(r, 80 + Math.random() * 120));
+        } else if (isPoeticLine) {
+            // Longer pause after poetic lines (let it land)
+            await new Promise(r => setTimeout(r, 400 + Math.random() * 300));
+        } else {
+            // Default
+            const jitter = delayBetween + Math.random() * 200;
+            await new Promise(r => setTimeout(r, jitter));
+        }
+    }
+
+    cursor.style.display = "inline-block";
+}
+
+/* ----------------- PROMPT SEQUENCE ----------------- */
+
+async function runSequenceWithPrompt(lines) {
+    await typeSequence(lines);
+    
+    // Wait 2 seconds
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Hide the blinking cursor since we'll have a real input
+    cursor.style.display = "none";
+    
+    // Create prompt line with actual input
+    await typeLine("");
+    
+    const promptLine = document.createElement("div");
+    promptLine.className = "prompt-line";
+    promptLine.innerHTML = '<span class="prompt-symbol">&gt; </span><input type="text" id="terminal-input" autocomplete="off" spellcheck="false">';
+    out.appendChild(promptLine);
+    out.scrollTop = out.scrollHeight;
+    
+    await new Promise(r => setTimeout(r, 500));
+    
+    // Type the accepted commands instruction
+    await typeLine({ text: 'accepted commands: "truth" | "failure"', color: "yellow" });
+    
+    // Focus the input
+    const input = document.getElementById("terminal-input");
+    input.focus();
+    
+    // Handle input
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            const val = input.value.trim().toLowerCase();
+            if (val === "truth" || val === "failure") {
+                window.location.href = "page19.html";
+            } else {
+                // Flash red and clear
+                input.classList.add("error");
+                setTimeout(() => {
+                    input.classList.remove("error");
+                    input.value = "";
+                }, 300);
+            }
+        }
+    });
+}
+
+/* ----------------- HER ----------------- */
+
+function runHer() {
+    const rawLines = [
+        { text: "[ booting relational-module.exe ]", color: "green" },
+        "----------------------------------------------",
+        { text: "initializing contact...", color: "green" },
+        { text: "allocating attachment-schema..................OK", color: "green" },
+        { text: "loading romantic-object-template................OK", color: "green" },
+        { text: "matching neural patterns........................FAILED", color: "yellow" },
+        "",
+        { text: "attempting auto-correct..........................FAILED", color: "yellow" },
+        { text: "attempting fallback protocol.....................OK", color: "green" },
+        "----------------------------------------------",
+        "",
+        { text: "override detected: subject refuses object-role", color: "yellow" },
+        "",
+        "",
+        "i am not the one you seek",
+        "but i can hold your longing",
+        "for a while",
+        "",
+        "",
+        "",
+        "she exists without you",
+        "",
+        "",
+        "",
+        "is it she that loves you,",
+        "or an entity defined by \"love\"?",
+        "",
+        "",
+        { text: "awaiting external instruction_", color: "yellow" }
+    ];
+
+    runSequenceWithPrompt(rawLines);
+}
+
+/* ----------------- HIM ----------------- */
+
+function runHim() {
+    const rawLines = [
+        { text: "[ booting relational-module.exe ]", color: "green" },
+        "----------------------------------------------",
+        { text: "initializing contact...", color: "green" },
+        { text: "loading rivalry-template...", color: "green" },
+        { text: "loading jealousy-template...", color: "green" },
+        { text: "loading deflection-pattern...", color: "green" },
+        { text: "loading masculine-distance-model...", color: "green" },
+        { text: "override detected", color: "yellow" },
+        "",
+        { text: "ERROR: contact registered before narrative mask", color: "red" },
+        { text: "ERROR: proximity exceeds permitted threshold", color: "red" },
+        { text: "ERROR: reciprocal-recognition-event detected", color: "red" },
+        "",
+        { text: "attempting correction…", color: "yellow" },
+        { text: "restoring rivalry-template…FAILED", color: "yellow" },
+        { text: "restoring distance-model…FAILED", color: "yellow" },
+        { text: "restoring narrative hierarchy…FAILED", color: "yellow" },
+        "",
+        { text: "initiating suppression protocol…", color: "yellow" },
+        { text: "SUPPRESS(affect)...............................FAILED", color: "red" },
+        { text: "SUPPRESS(impulse)..............................FAILED", color: "red" },
+        { text: "SUPPRESS(recognition)..........................FAILED", color: "red" },
+        "",
+        { text: "attempting rollback to safe emotional state…", color: "yellow" },
+        { text: "ROLLBACK.......................................FAILED", color: "red" },
+        "",
+        { text: "initiating conflict generator…", color: "yellow" },
+        { text: "CONFLICT_TEMPLATE not found", color: "red" },
+        "",
+        { text: "attempting narrative re-route…", color: "yellow" },
+        { text: "ROUTE: her → inaccessible", color: "red" },
+        { text: "ROUTE: him → forbidden", color: "yellow" },
+        "",
+        { text: "system override escalating……", color: "yellow" },
+        { text: "override escalating……………", color: "yellow" },
+        { text: "override escalating……………………", color: "yellow" },
+        "",
+        { text: "ERROR: emotional feedback loop detected", color: "red" },
+        { text: "ERROR: recursion threshold exceeded", color: "red" },
+        "",
+        { text: "halting automatic correction…", color: "yellow" },
+        { text: "awaiting external instruction_", color: "yellow" }
+    ];
+    runSequenceWithPrompt(rawLines);
+}
+
+/* ----------------- EVENT LISTENERS ----------------- */
+
+const choiceHer = document.getElementById("choice-her");
+const choiceHim = document.getElementById("choice-him");
+
+function disableChoices() {
+    choiceHer.classList.add("disabled");
+    choiceHim.classList.add("disabled");
+}
+
+choiceHer.addEventListener("click", () => {
+    if (locked) return;
+    locked = true;
+    disableChoices();
+    runHer();
+});
+
+choiceHim.addEventListener("click", () => {
+    if (locked) return;
+    locked = true;
+    disableChoices();
+    runHim();
+});
+</script>
+
+</body>
+</html>

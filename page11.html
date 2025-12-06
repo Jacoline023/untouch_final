@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>page</title>
+
+<style>
+    body {
+        background: black;
+        color: #e6e6e6;
+        margin: 0;
+        font-family: "Courier New", monospace;
+        overflow: hidden;
+    }
+
+    #container {
+        width: 100%;
+        height: 100vh;
+        position: relative;
+        padding: 40px;
+        box-sizing: border-box;
+    }
+
+    #silhouette {
+        position: absolute;
+        left: 50%;
+        top: 8%;
+        transform: translateX(-50%);
+        white-space: pre;
+        letter-spacing: 0.08em;
+        font-size: 10px;
+        opacity: 0;
+        transition: opacity 0.5s ease, color 0.3s ease;
+        cursor: default;
+        user-select: none;
+        color: #e6e6e6;
+    }
+
+    /* silhouette becomes clickable only after all questions are used */
+    #silhouette.active {
+        opacity: 1;
+        cursor: pointer;
+    }
+
+    #silhouette.active:hover {
+        color: #f24343;
+    }
+
+    #answer-box {
+        position: absolute;
+        left: 60%;
+        top: 28%;
+        font-size: 1.15rem;
+        white-space: pre-wrap;
+        transition: opacity 0.4s ease;
+    }
+
+    #questions {
+        position: absolute;
+        left: 32%;
+        bottom: 16%;
+        font-size: 1.1rem;
+        line-height: 1.9;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+    }
+
+    .caret {
+        display: inline-block;
+        width: 0.55ch;
+        animation: blink 1s steps(1) infinite;
+        opacity: 0.9;
+    }
+
+    .question {
+        cursor: pointer;
+        transition: opacity 0.25s ease, background-color 0.15s ease, color 0.15s ease;
+        padding: 2px 6px;
+        border-radius: 2px;
+    }
+
+    .question.used {
+        opacity: 0.25;
+        pointer-events: none;
+        background: rgba(255,255,255,0.04);
+    }
+
+    .question:hover {color: #0f0;
+    }
+
+    .question.dimmed {
+        background: rgba(0,0,0,0.6);
+        color: #888;
+    }
+
+    @keyframes blink {
+        0% { opacity: 1; }
+        50% { opacity: 0; }
+        100% { opacity: 1; }
+    }
+</style>
+
+</head>
+<body>
+
+<div id="container">
+
+<pre id="silhouette">
+                                                                                                  
+                                                  :--.                                           
+                                                --=====:.                                        
+                                                ==++--+=:                                        
+                                                +*#+-+**                                         
+                                              -:*#**=*#*-.                                       
+                                              =:===-:-=:.=                                       
+                                               -+#=-:-+*-                                        
+                                                ++=-:---                                         
+                                                **+=-=:.                                         
+                                              #**###*++-=                                        
+                                               **+**++==                                         
+                                                :++++++:                                         
+                                                  .==:                                           
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                               .                                 
+                                ===    =                      =                                  
+                               -++++=+*.                      *#+=++=                            
+                               =+++++* .                       +*++++-                           
+                               =+++++:                          ***++=                           
+                               =+++**  .                        :#***+                           
+                              :++*#*   .                         ###**                           
+                              -+++**                             ###**=                          
+                              -+++*+                             **#*+=                          
+                              :+++++                             =##*+=                          
+                               +++++                              ##++-                          
+                               =+=++                              **++:                          
+                               =++++                              =*++                           
+                               .++++                              -*++                           </pre>
+
+<div id="answer-box"></div>
+
+<div id="questions">
+    <div class="question" data-answer="and you still stay.">-> i know what you are.</div>
+    <div class="question" data-answer="funny you say that to me.">-> i will not apologize for admiring her mind.</div>
+    <div class="question" data-answer="you’ve never fought me honestly.">-> i will not surrender her, not even to angels.</div>
+    <div class="question" data-answer="then why does she look at you?">-> you may claim her body; her soul is not yours.</div>
+</div>
+
+</div>
+
+<script>
+const questions = document.querySelectorAll(".question");
+const answerBox = document.getElementById("answer-box");
+const silhouette = document.getElementById("silhouette");
+const questionsBox = document.getElementById("questions");
+
+let usedCount = 0;
+let typingInterval = null;
+
+// Fade in silhouette, then questions
+window.addEventListener("load", () => {
+    setTimeout(() => {
+        silhouette.style.opacity = 0.55;
+        setTimeout(() => {
+            questionsBox.style.opacity = 1;
+        }, 400);
+    }, 200);
+});
+
+function typeAnswer(text) {
+    if (typingInterval) {
+        clearInterval(typingInterval);
+        typingInterval = null;
+    }
+    answerBox.innerHTML = "";
+    const textSpan = document.createElement("span");
+    const caretSpan = document.createElement("span");
+    caretSpan.className = "caret";
+    caretSpan.textContent = "|";
+    answerBox.appendChild(textSpan);
+    answerBox.appendChild(caretSpan);
+
+    let i = 0;
+    typingInterval = setInterval(() => {
+        textSpan.textContent = text.slice(0, i);
+        i++;
+        if (i > text.length) {
+            clearInterval(typingInterval);
+            typingInterval = null;
+        }
+    }, 30);
+}
+
+questions.forEach(q => {
+    q.addEventListener("click", () => {
+        questions.forEach(el => el.classList.remove("dimmed"));
+        const answer = q.dataset.answer;
+        setTimeout(() => typeAnswer(answer), 400);
+        q.classList.add("used");
+        q.classList.add("dimmed");
+        usedCount++;
+
+        if (usedCount === questions.length) {
+            setTimeout(() => {
+                setTimeout(() => {
+                    questionsBox.style.opacity = 0;
+                    answerBox.style.opacity = 0;
+                    setTimeout(() => {
+                        silhouette.classList.add("active");
+                        silhouette.style.opacity = 1;
+                        silhouette.addEventListener("click", nextPage, { once: true });
+                    }, 500);
+                }, 1000);
+            }, 1000);
+        }
+    });
+});
+
+function nextPage() {
+    window.location.href = "page13.html";
+}
+</script>
+
+</body>
+</html>

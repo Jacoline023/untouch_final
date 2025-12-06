@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>between/</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            background-color: #000000;
+            overflow-x: hidden;
+            overflow-y: auto;
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+            font-family: 'Courier New', monospace;
+            color: #ffffff;
+        }
+
+        .poem-container {
+            text-align: center;
+            font-size: 16px;
+            line-height: 1.6;
+            max-width: 640px;
+        }
+
+        .line {
+            margin: 6px 0;
+            min-height: 22px;
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+        }
+
+        .line.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .indent-1 { margin-left: 40px; }
+        .indent-2 { margin-left: 80px; }
+        .indent-3 { margin-left: 120px; }
+
+        .bracketed-word {
+            color: #ff0000;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .bracketed-word:hover {
+            color: #ff6666;
+        }
+
+        .revealed-word {
+            color: #ffffff;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="poem-container" id="poemContainer">
+        <div class="line" data-line="0" data-group="main">linen <span class="bracketed-word" data-word="light">[light]</span></div>
+        <div class="line" data-line="1" data-group="main">jawline in <span class="bracketed-word" data-word="sun">[sun]</span></div>
+        <div class="line" data-line="2" data-group="main">her <span class="bracketed-word" data-word="eyes">[eyes]</span> rising</div>
+        <div class="line" data-line="3" data-group="main">his <span class="bracketed-word" data-word="smile">[smile]</span> opening</div>
+        <div class="line" data-line="4" data-group="main">the world <span class="bracketed-word" data-word="beating">[beating]</span> louder underneath</div>
+        <div class="line" data-line="5" data-group="main"><br></div>
+        <div class="line" data-line="6" data-group="main">gravel <span class="bracketed-word" data-word="shifting">[shifting]</span> carrying ants</div>
+        <div class="line" data-line="7" data-group="main">wind <span class="bracketed-word" data-word="curling">[curling]</span> through fence wire</div>
+        <div class="line" data-line="8" data-group="main">clouds <span class="bracketed-word" data-word="bruising">[bruising]</span> the sky's rim</div>
+        <div class="line" data-line="9" data-group="main">cedar warmth <span class="bracketed-word" data-word="drifting">[drifting]</span> in dust</div>
+        <div class="line" data-line="10" data-group="main">the gate <span class="bracketed-word" data-word="slumbering">[slumbering]</span> beneath</div>
+        <div class="line" data-line="11" data-group="main"><br></div>
+        <div class="line" data-line="12" data-group="main" data-entry="words">unspoken <span class="bracketed-word" data-word="words">[words]</span></div>
+        <div class="line" data-line="13" data-group="main" data-entry="gaze"><span class="bracketed-word" data-word="gaze">[gaze]</span> too soft</div>
+        <div class="line" data-line="14" data-group="main" data-entry="ribs">heat under <span class="bracketed-word" data-word="ribs">[ribs]</span></div>
+        <div class="line" data-line="15" data-group="main"><span class="bracketed-word" data-word="names">[names]</span> thinning</div>
+        <div class="line" data-line="16" data-group="ending"><span class="bracketed-word" data-word="everything">[everything]</span> tilting</div>
+        <div class="line" data-line="17" data-group="ending">tilting</div>
+        <div class="line indent-1" data-line="18" data-group="ending">tilting</div>
+        <div class="line indent-2" data-line="19" data-group="ending">tilting</div>
+        <div class="line" data-line="20" data-group="ending">toward one silent current.</div>
+    </div>
+
+    <script>
+        // Track visible lines
+        let visibleLines = [];
+        let hiddenClickableMainLines = [];
+        let hiddenNonClickableMainLines = [];
+        let endingLines = [];
+        let allMainLinesRevealed = false;
+        let endingTriggered = false;
+        let endingCompleted = false;
+
+        // Determine entry point: prefer URL param `?entry=...`, fall back to referrer
+        function getQueryParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name);
+        }
+
+        function getEntryLine() {
+            const q = getQueryParam('entry');
+            if (q) return q;
+            const referrer = document.referrer || '';
+            if (referrer.includes('page6')) {
+                return 'gaze';
+            } else if (referrer.includes('page7')) {
+                return 'ribs';
+            } else if (referrer.includes('page8')) {
+                return 'words';
+            } else {
+                return 'ribs'; // default
+            }
+        }
+
+        // Typewriter effect for revealing a line (standard, used for non-clickable lines and ending)
+        // cps = characters per second, default ~33 (30ms interval)
+        function typewriteLine(line, callback, cps = 33) {
+            const originalHTML = line.innerHTML;
+            const text = line.textContent;
+            line.textContent = '';
+            line.classList.add('visible');
+            
+            const interval = Math.round(1000 / cps);
+            let i = 0;
+            const typeInterval = setInterval(() => {
+                if (i < text.length) {
+                    line.textContent += text[i];
+                    i++;
+                } else {
+                    clearInterval(typeInterval);
+                    line.innerHTML = originalHTML;
+                    if (callback) callback();
+                }
+            }, interval);
+        }
+
+        // Bidirectional typewriter: starts from the keyword and expands outward
+        function typewriteBidirectional(line, callback) {
+            const span = line.querySelector('.bracketed-word, .revealed-word');
+            if (!span) {
+                // No keyword, fall back to standard typewriter
+                typewriteLine(line, callback);
+                return;
+            }
+
+            const originalHTML = line.innerHTML;
+            const fullText = line.textContent;
+            const word = span.dataset.word;
+            
+            // Find where the word appears in the full text
+            const wordIndex = fullText.indexOf(word);
+            if (wordIndex === -1) {
+                typewriteLine(line, callback);
+                return;
+            }
+
+            const beforeText = fullText.substring(0, wordIndex);
+            const afterText = fullText.substring(wordIndex + word.length);
+
+            // Start with just the word visible
+            line.innerHTML = `<span class="revealed-word" data-word="${word}">${word}</span>`;
+            line.classList.add('visible');
+
+            let leftIndex = beforeText.length - 1;
+            let rightIndex = 0;
+            let currentBefore = '';
+            let currentAfter = '';
+
+            const typeInterval = setInterval(() => {
+                let changed = false;
+
+                // Type one character to the left
+                if (leftIndex >= 0) {
+                    currentBefore = beforeText[leftIndex] + currentBefore;
+                    leftIndex--;
+                    changed = true;
+                }
+
+                // Type one character to the right
+                if (rightIndex < afterText.length) {
+                    currentAfter = currentAfter + afterText[rightIndex];
+                    rightIndex++;
+                    changed = true;
+                }
+
+                if (changed) {
+                    line.innerHTML = `${currentBefore}<span class="revealed-word" data-word="${word}">${word}</span>${currentAfter}`;
+                }
+
+                // Done when both sides are complete
+                if (leftIndex < 0 && rightIndex >= afterText.length) {
+                    clearInterval(typeInterval);
+                    line.innerHTML = originalHTML;
+                    // Make sure the word stays revealed
+                    const newSpan = line.querySelector('.bracketed-word');
+                    if (newSpan) {
+                        newSpan.textContent = word;
+                        newSpan.classList.remove('bracketed-word');
+                        newSpan.classList.add('revealed-word');
+                    }
+                    if (callback) callback();
+                }
+            }, 30);
+        }
+
+        // Show only the keyword initially (for lines that will be revealed by clicking)
+        function showKeywordOnly(line) {
+            const span = line.querySelector('.bracketed-word');
+            if (!span) return;
+            
+            // Store original HTML for later
+            line.dataset.originalHtml = line.innerHTML;
+            
+            // Show only the bracketed word
+            line.innerHTML = '';
+            line.appendChild(span.cloneNode(true));
+            line.classList.add('visible');
+        }
+
+        // Initialize: show only the entry line and split hidden lines
+        function initialize() {
+            const entryWord = getEntryLine();
+            const allLines = document.querySelectorAll('.line[data-group="main"]');
+            endingLines = Array.from(document.querySelectorAll('.line[data-group="ending"]'));
+
+            // Build list of hidden main lines (separate clickable ones)
+            allLines.forEach(line => {
+                const lineNum = parseInt(line.dataset.line);
+                // Store original HTML for all lines with clickable words
+                if (line.querySelector('.bracketed-word')) {
+                    line.dataset.originalHtml = line.innerHTML;
+                }
+                
+                if (line.dataset.entry === entryWord) {
+                    // Entry line: show keyword only, ready to be clicked
+                    showKeywordOnly(line);
+                    visibleLines.push(lineNum);
+                } else {
+                    if (line.querySelector('.bracketed-word')) {
+                        hiddenClickableMainLines.push(lineNum);
+                    } else {
+                        hiddenNonClickableMainLines.push(lineNum);
+                    }
+                }
+            });
+        }
+
+        // Global click handler so every revealed word continues to work
+        document.getElementById('poemContainer').addEventListener('click', (e) => {
+            const word = e.target;
+            if (!word.classList.contains('bracketed-word') && !word.classList.contains('revealed-word')) return;
+
+            const line = word.closest('.line');
+            if (!line || !line.classList.contains('visible')) return;
+
+            // If this word hasn't been clicked yet, expand the line bidirectionally
+            if (!word.classList.contains('revealed-word')) {
+                // Restore original HTML before bidirectional typing
+                if (line.dataset.originalHtml) {
+                    line.innerHTML = line.dataset.originalHtml;
+                }
+                
+                typewriteBidirectional(line, () => {
+                    // After this line expands, reveal the next keyword (or ending)
+                    setTimeout(() => {
+                        if (hiddenClickableMainLines.length === 0) {
+                            revealAllNonClickableAndEnding();
+                        } else {
+                            revealRandomLine();
+                        }
+                    }, 300);
+                });
+            } else {
+                // Already revealed, just trigger next line
+                setTimeout(() => {
+                    if (hiddenClickableMainLines.length === 0) {
+                        revealAllNonClickableAndEnding();
+                    } else {
+                        revealRandomLine();
+                    }
+                }, 300);
+            }
+
+            // If [everything] was clicked, play out the remaining ending lines
+            if (word.dataset.word === 'everything') {
+                revealRemainingEnding();
+            }
+        });
+
+        // Reveal a random hidden line (just show the keyword, user clicks to expand)
+        function revealRandomLine() {
+            if (hiddenClickableMainLines.length === 0 && hiddenNonClickableMainLines.length === 0) {
+                // All main lines revealed, show ending
+                revealEnding();
+                return;
+            }
+
+            let lineNum;
+            if (hiddenClickableMainLines.length > 0) {
+                const randomIndex = Math.floor(Math.random() * hiddenClickableMainLines.length);
+                lineNum = hiddenClickableMainLines.splice(randomIndex, 1)[0];
+                
+                const line = document.querySelector(`.line[data-line="${lineNum}"]`);
+                // Just show the keyword, don't expand yet
+                showKeywordOnly(line);
+                visibleLines.push(lineNum);
+            } else {
+                // No more clickable lines, reveal all non-clickable and ending
+                revealAllNonClickableAndEnding();
+            }
+        }
+
+        // Reveal all remaining non-clickable lines, then trigger ending
+        function revealAllNonClickableAndEnding() {
+            let delay = 0;
+            while (hiddenNonClickableMainLines.length > 0) {
+                const lineNum = hiddenNonClickableMainLines.shift();
+                const line = document.querySelector(`.line[data-line="${lineNum}"]`);
+                setTimeout(() => {
+                    typewriteLine(line);
+                    visibleLines.push(lineNum);
+                }, delay);
+                delay += 400;
+            }
+            // After all non-clickable lines, reveal the ending
+            setTimeout(() => revealEnding(), delay + 200);
+        }
+
+        // Reveal the first ending line ([everything] tilting) - just show keyword
+        function revealEnding() {
+            if (endingTriggered) return;
+            endingTriggered = true;
+            const firstEndingLine = endingLines[0];
+            if (firstEndingLine) {
+                // Store original HTML and show keyword only
+                firstEndingLine.dataset.originalHtml = firstEndingLine.innerHTML;
+                showKeywordOnly(firstEndingLine);
+            }
+        }
+
+        // After clicking [everything], expand the line and reveal the remaining ending lines
+        function revealRemainingEnding() {
+            if (endingCompleted) return;
+            endingCompleted = true;
+            
+            const firstEndingLine = endingLines[0];
+            // Restore and expand the first ending line bidirectionally
+            if (firstEndingLine && firstEndingLine.dataset.originalHtml) {
+                firstEndingLine.innerHTML = firstEndingLine.dataset.originalHtml;
+                typewriteBidirectional(firstEndingLine, () => {
+                    // 1.5s pause before the first "tilting" appears
+                    setTimeout(() => {
+                        // Then reveal the rest of the ending lines (slower, cps=8, 1.5s interval)
+                        const rest = endingLines.slice(1);
+                        rest.forEach((line, index) => {
+                            setTimeout(() => {
+                                typewriteLine(line, () => {
+                                    // After the last line finishes, trigger the fall
+                                    if (index === rest.length - 1) {
+                                        setTimeout(() => {
+                                            makeCharactersFall();
+                                        }, 1500);
+                                    }
+                                }, 8);
+                            }, index * 1500);
+                        });
+                    }, 1500);
+                });
+            } else {
+                // Fallback: just reveal the rest
+                setTimeout(() => {
+                    const rest = endingLines.slice(1);
+                    rest.forEach((line, index) => {
+                        setTimeout(() => {
+                            typewriteLine(line, () => {
+                                if (index === rest.length - 1) {
+                                    setTimeout(() => {
+                                        makeCharactersFall();
+                                    }, 1500);
+                                }
+                            }, 8);
+                        }, index * 1500);
+                    });
+                }, 1500);
+            }
+        }
+
+        // Make all characters fall to the bottom of the page
+        function makeCharactersFall() {
+            const container = document.getElementById('poemContainer');
+            const allLines = container.querySelectorAll('.line.visible');
+            const characters = [];
+            
+            // Collect all character positions using a more accurate method
+            allLines.forEach(line => {
+                const text = line.textContent;
+                if (!text.trim()) return;
+                
+                // Create a range to measure each character precisely
+                const lineRect = line.getBoundingClientRect();
+                const computedStyle = window.getComputedStyle(line);
+                const fontSize = parseFloat(computedStyle.fontSize);
+                
+                // Wrap each character in a span to get exact positions
+                const originalHTML = line.innerHTML;
+                let charHTML = '';
+                for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    if (char === ' ') {
+                        charHTML += '<span class="char-measure">&nbsp;</span>';
+                    } else {
+                        charHTML += `<span class="char-measure">${char}</span>`;
+                    }
+                }
+                line.innerHTML = charHTML;
+                
+                const charSpans = line.querySelectorAll('.char-measure');
+                charSpans.forEach((span, i) => {
+                    const rect = span.getBoundingClientRect();
+                    characters.push({
+                        char: text[i],
+                        x: rect.left,
+                        y: rect.top,
+                        fontSize: fontSize
+                    });
+                });
+                
+                // Restore original HTML
+                line.innerHTML = originalHTML;
+            });
+            
+            // Hide original poem
+            container.style.visibility = 'hidden';
+            
+            // Create falling characters
+            const viewportHeight = window.innerHeight;
+            characters.forEach((charData, index) => {
+                if (charData.char.trim() === '') return; // Skip spaces
+                
+                const span = document.createElement('span');
+                span.textContent = charData.char;
+                span.style.position = 'fixed';
+                span.style.left = charData.x + 'px';
+                span.style.top = charData.y + 'px';
+                span.style.fontSize = charData.fontSize + 'px';
+                span.style.fontFamily = "'Courier New', monospace";
+                span.style.color = '#ffffff';
+                span.style.pointerEvents = 'none';
+                span.style.zIndex = '1000';
+                span.style.margin = '0';
+                span.style.padding = '0';
+                span.style.lineHeight = '1';
+                document.body.appendChild(span);
+                
+                // Random fall parameters - starts slow, accelerates, then spills at bottom
+                const fallDelay = Math.random() * 300;
+                const fallDuration = 1200 + Math.random() * 400;
+                const horizontalDrift = (Math.random() - 0.5) * 20;
+                const rotation = (Math.random() - 0.5) * 90;
+                const bottomY = viewportHeight - 20 - Math.random() * 30;
+                
+                // Spill parameters - how much they scatter when hitting bottom
+                const spillDirection = (Math.random() - 0.5) * 2; // -1 to 1
+                const spillDistance = 30 + Math.random() * 80;
+                const spillRotation = rotation + spillDirection * (180 + Math.random() * 180);
+                const finalX = charData.x + horizontalDrift + (spillDirection * spillDistance);
+                
+                setTimeout(() => {
+                    // First phase: fall with acceleration (slow start, fast end)
+                    span.style.transition = `top ${fallDuration}ms cubic-bezier(0.32, 0, 0.67, 0), left ${fallDuration}ms ease-out, transform ${fallDuration}ms ease-out`;
+                    span.style.top = bottomY + 'px';
+                    span.style.left = (charData.x + horizontalDrift) + 'px';
+                    span.style.transform = `rotate(${rotation}deg)`;
+                    
+                    // Second phase: spill/scatter on impact
+                    setTimeout(() => {
+                        span.style.transition = `left 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 400ms ease-out, opacity 600ms ease-out`;
+                        span.style.left = finalX + 'px';
+                        span.style.transform = `rotate(${spillRotation}deg)`;
+                        span.style.opacity = '0.5';
+                        
+                        // Store reference to fallen character
+                        fallenCharacters.push({
+                            element: span,
+                            finalX: finalX,
+                            finalY: bottomY
+                        });
+                    }, fallDuration);
+                }, fallDelay);
+            });
+            
+            // After all characters have fallen and spilled, make the pile clickable
+            const maxFallTime = 300 + 1600 + 400 + 500; // fallDelay + fallDuration + spillTime + buffer
+            setTimeout(() => {
+                createClickablePile();
+            }, maxFallTime);
+        }
+        
+        // Track fallen characters
+        let fallenCharacters = [];
+        let pileClicked = false;
+        
+        // Create clickable pile overlay
+        function createClickablePile() {
+            const pile = document.createElement('div');
+            pile.id = 'clickable-pile';
+            pile.style.position = 'fixed';
+            pile.style.bottom = '0';
+            pile.style.left = '0';
+            pile.style.right = '0';
+            pile.style.height = '80px';
+            pile.style.cursor = 'pointer';
+            pile.style.zIndex = '1001';
+            document.body.appendChild(pile);
+            
+            // Highlight effect on hover
+            pile.addEventListener('mouseenter', () => {
+                fallenCharacters.forEach(c => {
+                    c.element.style.transition = 'opacity 0.3s, color 0.3s';
+                    c.element.style.opacity = '1';
+                    c.element.style.color = '#ff6666';
+                });
+            });
+            
+            pile.addEventListener('mouseleave', () => {
+                if (!pileClicked) {
+                    fallenCharacters.forEach(c => {
+                        c.element.style.transition = 'opacity 0.3s, color 0.3s';
+                        c.element.style.opacity = '0.5';
+                        c.element.style.color = '#ffffff';
+                    });
+                }
+            });
+            
+            pile.addEventListener('click', () => {
+                if (pileClicked) return;
+                pileClicked = true;
+                pile.style.pointerEvents = 'none';
+                flyToSilhouettes();
+            });
+        }
+        
+        // ASCII art data
+        const womanArt = `                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                              .#%#%#:                                            
+                                             #*-+#%@@#                                           
+                                           .@=.   -*#%*-                                         
+                                           #*-:.   .=*#+                                         
+                                           @++      +=**-                                        
+                                          -@#:       .##+                                        
+                                          *@@=. ..    *%*                                        
+                                          *@@%-..    -%#+                                        
+                                          *#@@*=-..  @%%#.                                       
+                                          *##%*..   :@#*%-                                       
+                                         =**%#*.    -@**#+.                                      
+                                       ###%@@%=.  . -%##%#++                                     
+                                     -#@@%@@@%+.    .+%%#*+*:.                                   
+                                    ==*%@@@@@@+      =%%%#+=                                     
+                                   .-+#%@@@@@@+      :%#%@#*                                     
+                                   :=+#%@@@@@@@@@@@@@@**%@%%=                                    
+                                   :=*#%@@@@%@@@@@@@@%*%%@%*.                                    
+                                   .+*#%@@@@%@@@@@@@@@%#%%#=                                     
+                                    ++=*%@@@@@@@@@@@@@@*++%=                                     
+                                   .=:.==@@@@@@@@@@@@@@@%#*=                                     
+                                   .-. .:%@@@@@@@@@@@@@@@@ =                                     
+                                   .:. . #@@@@@@@@@@@@@@@@ =                                     
+                                   :   . #@@@@@@@@@@@@@@@@ =                                     
+                                   .   = @@@@@@@@@@@@@@@@@ -                                     
+                                  ..   %:@@@@@@@@@@@@@@@@@*-:.                                   
+                                  :.  . @@@@@@@@@@@@@@@@@@@-=.                                   
+                                  :.  -*@@@@@@@@@@@@@@@@@@@#+.                                   
+                                  ::  #@@@@@@@@@@@@@@@@@@@@@*:                                   
+                                  .: .=@@@@@@@@@@@@@@@@@@@@@*-                                   
+                                   : .@@@@@@@@@@@@@@@@@@@@@@@=                                   
+                                   : =@@@@@@@@@@@@@@@@@@@@@@@*                                   
+                                  .: =@@@@@@@@@@@@@@@@@@@@@@@+                                   
+                                  .: .@@@%@@@@@@%%%%@@%#**#%+                                    
+                                  ::  -@@%%@%%%@@@@@%%%##%##..                                   
+                                  -. ..@%%###%##@@@@%%##**#+.+                                   
+                                   =   @@%%%%%%%%@@@@@%##*%-=                                    
+                                    ::+@@@%%#%%%%@@@@%%%###%+.                                   
+                                       @@%%####%%*@@%%%###%-                                     
+                                       :@@%%####@=@@%%###%%                                      
+                                        @@%%####@:@@%%###%=                                      
+                                        %@@%###%%.@@%%#*##                                       
+                                        +@%%###%#.@@%###%*                                       
+                                         @@####%*+@@%#*##-                                       
+                                         @%#%##%:=@%##*##                                        
+                                         @%%###% -@%#**##                                        
+                                         @@#*##% -@%%**#%                                        
+                                        .@@%#%%@ :@@%##%%                                        
+                                        =@@@#%@%  @@@%#%%                                        
+                                        @@@@@@@%  @@@@%@@=                                       
+                                        @@@@@@@@  @@@@%@%                                        
+                                        @@@@@@@@ *@@@@%%%                                        
+                                        =@@@@@@@ @@@@@%%%                                        
+                                         @@@@@@@ @@@@@@%-                                        
+                                         %@@@@@@ #@@@@@%                                         
+                                          @@@@@@ =@@@@@*                                         
+                                          #@@@@@ @@@@@%:                                         
+                                          .@@@@@+@@@@@#                                          
+                                           @@@@@=@@@@%#                                          
+                                           @@@%@#@* %@                                           
+                                           -:.-  :                                               
+                                                 #                                               
+                                           ..    #                                               
+                                                                                                 
+                                            --=-: :==-                                           
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 `;
+
+        const manArt = `                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                  :--.                                           
+                                                --=====:.                                        
+                                                ==++--+=:                                        
+                                                +*#+-+**                                         
+                                              -:*#**=*#*-.                                       
+                                              =:===-:-=:.=                                       
+                                               -+#=-:-+*-                                        
+                                                ++=-:---                                         
+                                                **+=-=:.                                         
+                                              #**###*++-=                                        
+                                               **+**++==                                         
+                                                :++++++:                                         
+                                                  .==:                                           
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                               .                                 
+                                ===    =                      =                                  
+                               -++++=+*.                      *#+=++=                            
+                               =+++++* .                       +*++++-                           
+                               =+++++:                          ***++=                           
+                               =+++**  .                        :#***+                           
+                              :++*#*   .                         ###**                           
+                              -+++**                             ###**=                          
+                              -+++*+                             **#*+=                          
+                              :+++++                             =##*+=                          
+                               +++++                              ##++-                          
+                               =+=++                              **++:                          
+                               =++++                              =*++                           
+                               .++++                              -*++                           
+                                =+++                              =*+=                           
+                                .+++                          .** #*+=                           
+                                 =++#                   -##%%%@+-*#*+=                           
+                                 =+**++=-%%#%##%%###**##%%%%%%@@-++++                            
+                                  +++++-@%%#####++**%%%%%%%%%%@@*++=-                            
+                                  =+*+++@@%%##%#*#%%%@@@%%%#%@%****+.                            
+                                  -***#++@%#####%%%%@@@@%%#%##@%***-                             
+                                   %+**##+%######%%@@@@%%%###@#%#+.                              
+                                    ++%*=@%######%+@@@@%%%#####:                                 
+                                     .*+%=%#####%% %@@@%%%###**.                                 
+                                     .*###########  @@@@%%####+                                  
+                                     .*##########   @@@%%%####+                                  
+                                     :###########   @@@%%%###*                                   
+                                     +*##########   %@@@%%###+                                   
+                                     :*#########    %%%%%%###                                    
+                                      #########*   .%%%%%%##*                                    
+                                     -#########=    %%%%%%%#+                                    
+                                     .*########     @@@%%%#*-                                    
+                                     +##%#####-     %%%%%%%#=                                    
+                                    .*%%%#####      @@%%@%##                                     
+                                    .*#%@@%#%       *%@@@%%%+                                    
+                                    +%%%%%%##       @%%%%%@#:                                    
+                                    #%%###%%*       %%%%%%%#                                     
+                                   .####%%%%        #%%%%%#*                                     
+                                   +#%%###%#        %@@%%%%-                                     
+                                   *%%%%%%%#       .%%%%%%#-                                     
+                                   ##%%#%#%#       *%%%%%%#-                                     
+                                   %#%%%%%#*       #%%%%%%%-                                     
+                                   %%%%%%%%:      :#%%%%%%%                                      
+                                  .#%%%%%%%       +%%%%%%%+                                      
+                                  .#%%%%%%%       @@@%%%%%                                       
+                                   #%%%%%%%       @@@@@%%                                        
+                                  .%%@@%%%%       %%@@@@@                                        
+                                  =%%%%%%%-       .%@%*+-.                                       
+                                  #%%@@%%%        .#@@++=-                                       
+                                 .=+%%%%%          %%###@%#.                                     
+                                -*+**%@%#             @@@%%#*                                    
+                               *%%*%@@@%*               :.                                       
+                            :*#%%%@@+                                                            
+                             :=*+-.                                                              
+                              .                                                                  
+                                                                                                 
+                                                                                                 
+                                                                                                 
+                                                                                                 `;
+
+        // Fly characters to form silhouettes
+        function flyToSilhouettes() {
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Parse ASCII art into character positions
+            const womanChars = parseAsciiArt(womanArt);
+            const manChars = parseAsciiArt(manArt);
+            
+            // Calculate positions for left (woman) and right (man) silhouettes
+            const charSize = 6; // font size for ASCII art
+            
+            // Calculate the height of the ASCII art
+            const womanHeight = womanArt.split('\n').length * charSize;
+            const manHeight = manArt.split('\n').length * charSize;
+            
+            // Center vertically
+            const womanStartY = (viewportHeight - womanHeight) / 2;
+            const manStartY = (viewportHeight - manHeight) / 2;
+            
+            // Position on opposite ends (man closer to center to avoid cutoff)
+            const womanStartX = 20;
+            const manStartX = viewportWidth / 2 + 40;
+            
+            // Get positions of fallen characters to use as spawn points
+            const spawnPoints = fallenCharacters.map(c => ({
+                x: parseFloat(c.element.style.left),
+                y: parseFloat(c.element.style.top)
+            }));
+            
+            // Fade out original fallen characters
+            fallenCharacters.forEach(c => {
+                c.element.style.transition = 'opacity 400ms';
+                c.element.style.opacity = '0';
+            });
+            
+            // Helper to get a random spawn point from the pile
+            function getRandomSpawnPoint() {
+                if (spawnPoints.length === 0) {
+                    return { x: viewportWidth / 2, y: viewportHeight - 40 };
+                }
+                return spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+            }
+            
+            // Create and animate woman silhouette characters (spawning from pile)
+            womanChars.forEach((pos, index) => {
+                const targetX = womanStartX + pos.x * charSize;
+                const targetY = womanStartY + pos.y * charSize;
+                const spawn = getRandomSpawnPoint();
+                
+                const span = document.createElement('span');
+                span.textContent = pos.char;
+                span.style.position = 'fixed';
+                span.style.left = spawn.x + 'px';
+                span.style.top = spawn.y + 'px';
+                span.style.fontSize = charSize + 'px';
+                span.style.fontFamily = "'Courier New', monospace";
+                span.style.color = '#ffffff';
+                span.style.opacity = '0.5';
+                span.style.pointerEvents = 'none';
+                span.style.zIndex = '1000';
+                span.style.transform = `rotate(${(Math.random() - 0.5) * 90}deg)`;
+                span.dataset.silhouette = 'woman';
+                document.body.appendChild(span);
+                
+                const delay = Math.random() * 800;
+                setTimeout(() => {
+                    span.style.transition = 'all 1200ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+                    span.style.left = targetX + 'px';
+                    span.style.top = targetY + 'px';
+                    span.style.opacity = '1';
+                    span.style.transform = 'rotate(0deg)';
+                }, delay);
+            });
+            
+            // Create and animate man silhouette characters (spawning from pile)
+            manChars.forEach((pos, index) => {
+                const targetX = manStartX + pos.x * charSize;
+                const targetY = manStartY + pos.y * charSize;
+                const spawn = getRandomSpawnPoint();
+                
+                const span = document.createElement('span');
+                span.textContent = pos.char;
+                span.style.position = 'fixed';
+                span.style.left = spawn.x + 'px';
+                span.style.top = spawn.y + 'px';
+                span.style.fontSize = charSize + 'px';
+                span.style.fontFamily = "'Courier New', monospace";
+                span.style.color = '#ffffff';
+                span.style.opacity = '0.5';
+                span.style.pointerEvents = 'none';
+                span.style.zIndex = '1000';
+                span.style.transform = `rotate(${(Math.random() - 0.5) * 90}deg)`;
+                span.dataset.silhouette = 'man';
+                document.body.appendChild(span);
+                
+                const delay = Math.random() * 800;
+                setTimeout(() => {
+                    span.style.transition = 'all 1200ms cubic-bezier(0.34, 1.56, 0.64, 1)';
+                    span.style.left = targetX + 'px';
+                    span.style.top = targetY + 'px';
+                    span.style.opacity = '1';
+                    span.style.transform = 'rotate(0deg)';
+                }, delay);
+            });
+            
+            // After animation completes, create hover zones
+            setTimeout(() => {
+                createSilhouetteInteractions(womanStartX, manStartX, womanStartY, manStartY, charSize, womanChars, manChars);
+            }, 2200);
+        }
+        
+        // Parse ASCII art into array of {x, y, char}
+        function parseAsciiArt(art) {
+            const lines = art.split('\n');
+            const chars = [];
+            lines.forEach((line, y) => {
+                for (let x = 0; x < line.length; x++) {
+                    const char = line[x];
+                    if (char && char !== ' ') {
+                        chars.push({ x, y, char });
+                    }
+                }
+            });
+            return chars;
+        }
+        
+        // Create hover and click interactions for silhouettes
+        function createSilhouetteInteractions(womanX, manX, womanY, manY, charSize, womanChars, manChars) {
+            const viewportHeight = window.innerHeight;
+            
+            // Create cursor-following tag
+            const cursorTag = document.createElement('div');
+            cursorTag.id = 'cursor-tag';
+            cursorTag.style.position = 'fixed';
+            cursorTag.style.color = '#ffffff';
+            cursorTag.style.fontFamily = "'Courier New', monospace";
+            cursorTag.style.fontSize = '12px';
+            cursorTag.style.pointerEvents = 'none';
+            cursorTag.style.zIndex = '2000';
+            cursorTag.style.opacity = '0';
+            cursorTag.style.transition = 'opacity 0.2s';
+            cursorTag.style.whiteSpace = 'nowrap';
+            document.body.appendChild(cursorTag);
+            
+            // Particle container
+            const particleContainer = document.createElement('div');
+            particleContainer.id = 'particle-container';
+            particleContainer.style.position = 'fixed';
+            particleContainer.style.top = '0';
+            particleContainer.style.left = '0';
+            particleContainer.style.width = '100%';
+            particleContainer.style.height = '100%';
+            particleContainer.style.pointerEvents = 'none';
+            particleContainer.style.zIndex = '999';
+            document.body.appendChild(particleContainer);
+            
+            // Heartbeat state
+            let heartbeatInterval = null;
+            let currentHoverTarget = null;
+            
+            // Create a single heartbeat pulse of particles
+            function createHeartbeatPulse(silhouetteType) {
+                const chars = document.querySelectorAll(`[data-silhouette="${silhouetteType}"]`);
+                if (chars.length === 0) return;
+                
+                // Pick random characters from the silhouette to emit particles from
+                const numParticles = 5 + Math.floor(Math.random() * 4);
+                for (let i = 0; i < numParticles; i++) {
+                    const randomChar = chars[Math.floor(Math.random() * chars.length)];
+                    const rect = randomChar.getBoundingClientRect();
+                    
+                    const particle = document.createElement('div');
+                    particle.style.position = 'fixed';
+                    particle.style.left = rect.left + 'px';
+                    particle.style.top = rect.top + 'px';
+                    particle.style.width = '2px';
+                    particle.style.height = '2px';
+                    particle.style.backgroundColor = '#ff6666';
+                    particle.style.borderRadius = '50%';
+                    particle.style.pointerEvents = 'none';
+                    particle.style.opacity = '0.8';
+                    particle.style.boxShadow = '0 0 4px #ff6666';
+                    particleContainer.appendChild(particle);
+                    
+                    // Animate particle floating outward
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = 15 + Math.random() * 25;
+                    const duration = 600 + Math.random() * 400;
+                    
+                    particle.style.transition = `all ${duration}ms ease-out`;
+                    
+                    requestAnimationFrame(() => {
+                        particle.style.left = (rect.left + Math.cos(angle) * distance) + 'px';
+                        particle.style.top = (rect.top + Math.sin(angle) * distance) + 'px';
+                        particle.style.opacity = '0';
+                        particle.style.transform = 'scale(0.5)';
+                    });
+                    
+                    // Remove particle after animation
+                    setTimeout(() => {
+                        particle.remove();
+                    }, duration);
+                }
+            }
+            
+            // Start heartbeat effect
+            function startHeartbeat(silhouetteType) {
+                if (heartbeatInterval) return;
+                
+                // Immediate first pulse
+                createHeartbeatPulse(silhouetteType);
+                
+                // Heartbeat rhythm: two quick pulses, then pause (lub-dub pattern)
+                let beatCount = 0;
+                heartbeatInterval = setInterval(() => {
+                    if (currentHoverTarget !== silhouetteType) {
+                        stopHeartbeat();
+                        return;
+                    }
+                    
+                    beatCount++;
+                    if (beatCount % 3 === 1) {
+                        // First beat (lub)
+                        createHeartbeatPulse(silhouetteType);
+                    } else if (beatCount % 3 === 2) {
+                        // Second beat (dub) - slightly smaller
+                        setTimeout(() => createHeartbeatPulse(silhouetteType), 150);
+                    }
+                    // Third interval is the pause
+                }, 400);
+            }
+            
+            // Stop heartbeat effect
+            function stopHeartbeat() {
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+            }
+            
+            // Track mouse for cursor tag
+            document.addEventListener('mousemove', (e) => {
+                cursorTag.style.left = (e.clientX + 15) + 'px';
+                cursorTag.style.top = (e.clientY + 15) + 'px';
+            });
+            
+            // Woman hover zone (left) - offset to match actual character positions
+            // The ASCII art has ~46 chars of leading whitespace, so offset the zone
+            const womanActualX = womanX + (46 * charSize);
+            const womanZone = document.createElement('div');
+            womanZone.id = 'woman-zone';
+            womanZone.style.position = 'fixed';
+            womanZone.style.left = womanActualX + 'px';
+            womanZone.style.top = womanY + 'px';
+            womanZone.style.width = '200px';
+            womanZone.style.height = '700px';
+            womanZone.style.cursor = 'pointer';
+            womanZone.style.zIndex = '1002';
+            document.body.appendChild(womanZone);
+            
+            womanZone.addEventListener('mouseenter', () => {
+                currentHoverTarget = 'woman';
+                cursorTag.textContent = 'talk to her';
+                cursorTag.style.opacity = '1';
+                document.querySelectorAll('[data-silhouette="woman"]').forEach(el => {
+                    el.style.color = '#ff6666';
+                    el.style.transition = 'color 0.2s';
+                });
+                startHeartbeat('woman');
+            });
+            
+            womanZone.addEventListener('mouseleave', () => {
+                currentHoverTarget = null;
+                cursorTag.style.opacity = '0';
+                document.querySelectorAll('[data-silhouette="woman"]').forEach(el => {
+                    el.style.color = '#ffffff';
+                });
+                stopHeartbeat();
+            });
+            
+            womanZone.addEventListener('click', () => {
+                window.location.href = 'page10.html';
+            });
+            
+            // Man hover zone (right) - offset to match actual character positions
+            // The ASCII art has ~32 chars of leading whitespace, so offset the zone
+            const manActualX = manX + (32 * charSize);
+            const manZone = document.createElement('div');
+            manZone.id = 'man-zone';
+            manZone.style.position = 'fixed';
+            manZone.style.left = manActualX + 'px';
+            manZone.style.top = manY + 'px';
+            manZone.style.width = '280px';
+            manZone.style.height = '700px';
+            manZone.style.cursor = 'pointer';
+            manZone.style.zIndex = '1002';
+            document.body.appendChild(manZone);
+            
+            manZone.addEventListener('mouseenter', () => {
+                currentHoverTarget = 'man';
+                cursorTag.textContent = 'talk to him';
+                cursorTag.style.opacity = '1';
+                document.querySelectorAll('[data-silhouette="man"]').forEach(el => {
+                    el.style.color = '#ff6666';
+                    el.style.transition = 'color 0.2s';
+                });
+                startHeartbeat('man');
+            });
+            
+            manZone.addEventListener('mouseleave', () => {
+                currentHoverTarget = null;
+                cursorTag.style.opacity = '0';
+                document.querySelectorAll('[data-silhouette="man"]').forEach(el => {
+                    el.style.color = '#ffffff';
+                });
+                stopHeartbeat();
+            });
+            
+            manZone.addEventListener('click', () => {
+                window.location.href = 'page11.html';
+            });
+        }
+
+        // Initialize the poem
+        initialize();
+    </script>
+</body>
+</html>
