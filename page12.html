@@ -139,19 +139,19 @@
 
     function addIdleDrift(p) {
       if (mouse.active || p.locked || allHotspotsLocked || p.collapsing) return;
-      p.vx += (Math.random() - 0.5) * 0.07;
-      p.vy += (Math.random() - 0.5) * 0.07;
+      p.vx += (Math.random() - 0.5) * 0.18;
+      p.vy += (Math.random() - 0.5) * 0.18;
     }
 
-    // subtle repulsion
+    // repulsion with stronger push but high friction
     function repelFromMouse(p) {
       if (!mouse.active || allHotspotsLocked || p.collapsing) return;
       const dx = p.x - mouse.x;
       const dy = p.y - mouse.y;
       const dist = Math.hypot(dx, dy);
-      const influence = 70;
+      const influence = 100;
       if (dist < influence && dist > 0.01) {
-        const force = (influence - dist) / influence * 0.04;
+        const force = (influence - dist) / influence * 0.15;
         p.vx += (dx / dist) * force;
         p.vy += (dy / dist) * force;
       }
@@ -316,7 +316,7 @@ if (p.collapsing) {
           p.x = Math.max(0, Math.min(canvas.width, p.x));
           p.y = Math.max(0, Math.min(canvas.height, p.y));
 
-          const damping = mouse.active ? 0.993 : 0.989;
+          const damping = mouse.active ? 0.94 : 0.985;
           p.vx *= damping;
           p.vy *= damping;
 
