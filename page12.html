@@ -24,10 +24,10 @@
       font-family: "Courier New", monospace;
       font-size: 22px;
       opacity: 0;
-      transition: opacity 1.2s ease, transform 1.2s ease;
+      transition: opacity 0.8s ease;
       pointer-events: none;
       text-shadow: 0 0 8px #ffffff88;
-      z-index: 3;
+      z-index: 5;
     }
 
     #fadeBlack {
@@ -50,10 +50,25 @@
       top: 50%;
       transform: translate(-50%, -50%);
       opacity: 0;
-      transition: opacity 1.2s ease;
+      transition: opacity 1.2s ease, box-shadow 0.4s ease;
       cursor: pointer;
       z-index: 6;
       pointer-events: none;
+      box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+    }
+
+    #centerCircle:hover {
+      box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.6);
+    }
+
+    .supernova-glow {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.3) 30%, rgba(255,255,255,0) 60%);
+      pointer-events: none;
+      z-index: 4;
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.3);
     }
   </style>
 </head>
@@ -109,17 +124,29 @@
         particles.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 1.0,
-          vy: (Math.random() - 0.5) * 1.0,
+          // Very slow initial velocity - like distant stars
+          vx: (Math.random() - 0.5) * 0.08,
+          vy: (Math.random() - 0.5) * 0.08,
           char: symbols[Math.floor(Math.random() * symbols.length)],
           size: 8 + Math.random() * 4,
           pulse: Math.random() * Math.PI * 2,
 
+          // Per-particle personality - gentler values for idle, still varied for gravity
+          driftStrength: 0.002 + Math.random() * 0.004, // very gentle drift
+          gravityResponse: 0.4 + Math.random() * 1.2, // keep varied for pulls
+          noiseOffsetX: Math.random() * 1000,
+          noiseOffsetY: Math.random() * 1000,
+
           locked: false,
           lockedIndex: null,
           orbitRadius: 0,
+          targetOrbitRadius: 0,
           orbitAngle: Math.random() * Math.PI * 2,
-          orbitSpeed: 0.001 + Math.random() * 0.001,
+          orbitSpeed: 0.0005 + Math.random() * 0.002,
+          orbitEccentricity: 0.3 + Math.random() * 0.5,
+          orbitTilt: Math.random() * Math.PI * 2,
+          radialDrift: (Math.random() - 0.5) * 0.02,
+          lockTransition: 0,
 
           collapsing: false,
           fadeProgress: 1,
@@ -137,38 +164,101 @@
       ctx.fillText(p.char, p.x, p.y);
     }
 
-    function addIdleDrift(p) {
-      if (mouse.active || p.locked || allHotspotsLocked || p.collapsing) return;
-      p.vx += (Math.random() - 0.5) * 0.18;
-      p.vy += (Math.random() - 0.5) * 0.18;
+    // Smooth noise-based drift - very gentle for star-like floating
+    function addIdleDrift(p, time) {
+      if (p.locked || allHotspotsLocked || p.collapsing) return;
+
+      // Very slow-moving noise for gentle stellar drift
+      const t = time * 0.00003; // much slower
+      const noiseX = Math.sin(t + p.noiseOffsetX) * Math.cos(t * 0.7 + p.noiseOffsetY);
+      const noiseY = Math.cos(t + p.noiseOffsetY) * Math.sin(t * 0.6 + p.noiseOffsetX);
+
+      p.vx += noiseX * p.driftStrength * 0.15; // much gentler
+      p.vy += noiseY * p.driftStrength * 0.15;
     }
 
-    // repulsion with stronger push but high friction
+    // Ensure particles maintain minimum velocity - very subtle for stars
+    function maintainMinimumVelocity(p) {
+      if (p.locked || p.collapsing) return;
+      const speed = Math.hypot(p.vx, p.vy);
+      // Very low minimum - stars can almost hover
+      const minSpeed = 0.01;
+      if (speed < minSpeed) {
+        const angle = p.noiseOffsetX + performance.now() * 0.00005;
+        p.vx += Math.cos(angle) * 0.005;
+        p.vy += Math.sin(angle) * 0.005;
+      }
+      // Cap maximum speed - still allow fast movement when pulled
+      const maxSpeed = 0.4 + p.gravityResponse * 0.2;
+      if (speed > maxSpeed) {
+        p.vx = (p.vx / speed) * maxSpeed;
+        p.vy = (p.vy / speed) * maxSpeed;
+      }
+    }
+
+    // Diffusion - only really kicks in when crowded from being pulled together
+    function applyDiffusion(p, particles) {
+      if (p.locked || p.collapsing) return;
+      let nearbyCount = 0;
+      for (const other of particles) {
+        if (other === p || other.locked || other.collapsing) continue;
+        const dx = p.x - other.x;
+        const dy = p.y - other.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 25 && dist > 0.1) { // tighter radius
+          nearbyCount++;
+          // Only apply diffusion if actually crowded
+          if (nearbyCount > 2) {
+            const force = (25 - dist) / 25 * 0.004 * p.gravityResponse;
+            p.vx += (dx / dist) * force;
+            p.vy += (dy / dist) * force;
+          }
+        }
+      }
+      // Extra push only if very crowded
+      if (nearbyCount > 6) {
+        const angle = Math.random() * Math.PI * 2;
+        p.vx += Math.cos(angle) * 0.02;
+        p.vy += Math.sin(angle) * 0.02;
+      }
+    }
+
+    // subtle repulsion
     function repelFromMouse(p) {
       if (!mouse.active || allHotspotsLocked || p.collapsing) return;
       const dx = p.x - mouse.x;
       const dy = p.y - mouse.y;
       const dist = Math.hypot(dx, dy);
-      const influence = 100;
+      const influence = 70;
       if (dist < influence && dist > 0.01) {
-        const force = (influence - dist) / influence * 0.15;
+        const force = (influence - dist) / influence * 0.04;
         p.vx += (dx / dist) * force;
         p.vy += (dy / dist) * force;
       }
     }
 
-    function bundleTowardsHotspot(p, activeHotspots) {
+    function bundleTowardsHotspot(p, activeHotspots, time) {
       let pulseBoost = 0;
       for (const h of activeHotspots) {
         const dx = h.x - p.x;
         const dy = h.y - p.y;
         const dist = Math.hypot(dx, dy) || 1;
-        const pullRadius = 190;
+        const pullRadius = 200;
         if (dist < pullRadius) {
-          const attraction = (pullRadius - dist) / pullRadius * 0.08;
-          p.vx += (dx / dist) * attraction;
-          p.vy += (dy / dist) * attraction;
-          pulseBoost = Math.max(pulseBoost, 2);
+          // Pulsing gravity strength
+          const gravityPulse = 1 + Math.sin(time * 0.003 + h.index) * 0.3;
+          // Per-particle response varies
+          const baseAttraction = (pullRadius - dist) / pullRadius * 0.06;
+          const attraction = baseAttraction * p.gravityResponse * gravityPulse;
+
+          // Add slight tangential swirl for more organic gathering
+          const tangentX = -dy / dist;
+          const tangentY = dx / dist;
+          const swirlStrength = 0.015 * (1 - dist / pullRadius);
+
+          p.vx += (dx / dist) * attraction + tangentX * swirlStrength;
+          p.vy += (dy / dist) * attraction + tangentY * swirlStrength;
+          pulseBoost = Math.max(pulseBoost, 2 * gravityPulse);
         }
       }
       return pulseBoost;
@@ -177,12 +267,50 @@
     function twirlAroundHotspot(p, time) {
       const target = hotspots[p.lockedIndex];
       if (!target) return;
+
+      // Smoothly transition into orbit
+      if (p.lockTransition < 1) {
+        p.lockTransition += 0.02; // gradual transition
+        if (p.lockTransition > 1) p.lockTransition = 1;
+      }
+
+      // Smoothly expand orbit radius to target
+      p.orbitRadius += (p.targetOrbitRadius - p.orbitRadius) * 0.03;
+
       p.orbitAngle += p.orbitSpeed;
-      const wobble = Math.sin(time / 900 + p.pulse) * 0.3;
-      const radius = p.orbitRadius + wobble;
-      p.x = target.x + Math.cos(p.orbitAngle) * radius;
-      p.y = target.y + Math.sin(p.orbitAngle) * radius;
-      drawParticle(p, time, 3.0);
+
+      // Slow radial drift - particles migrate in and out
+      p.targetOrbitRadius += p.radialDrift;
+      // Constrain radius so they don't drift too far
+      if (p.targetOrbitRadius < 15) {
+        p.targetOrbitRadius = 15;
+        p.radialDrift = Math.abs(p.radialDrift) * 0.5;
+      }
+      if (p.targetOrbitRadius > 110) {
+        p.targetOrbitRadius = 110;
+        p.radialDrift = -Math.abs(p.radialDrift) * 0.5;
+      }
+
+      // Gentle breathing wobble
+      const wobble = Math.sin(time / 1200 + p.pulse) * 3;
+
+      // Elliptical orbit calculation
+      const ellipseX = Math.cos(p.orbitAngle) * p.orbitRadius;
+      const ellipseY = Math.sin(p.orbitAngle) * p.orbitRadius * p.orbitEccentricity;
+
+      // Rotate the ellipse by the tilt angle
+      const rotatedX = ellipseX * Math.cos(p.orbitTilt) - ellipseY * Math.sin(p.orbitTilt);
+      const rotatedY = ellipseX * Math.sin(p.orbitTilt) + ellipseY * Math.cos(p.orbitTilt);
+
+      // Target position in orbit
+      const orbitX = target.x + rotatedX + wobble * Math.cos(time / 800 + p.pulse);
+      const orbitY = target.y + rotatedY + wobble * Math.sin(time / 800 + p.pulse);
+
+      // Blend from current position to orbit position based on transition
+      p.x = p.x + (orbitX - p.x) * (0.02 + p.lockTransition * 0.03);
+      p.y = p.y + (orbitY - p.y) * (0.02 + p.lockTransition * 0.03);
+
+      drawParticle(p, time, 2.0);
     }
 
     function showWord(word, baseX, baseY) {
@@ -199,55 +327,94 @@
 
       requestAnimationFrame(() => {
         el.style.opacity = "1";
-        el.style.transform = "translateY(-12px)";
       });
     }
 
-function collapseGalaxy(index) {
-  if (collapsed[index]) return;
-  if (clickWordIndex >= revealWords.length) return;
+    function createSupernovaGlow(x, y, word) {
+      const glow = document.createElement("div");
+      glow.className = "supernova-glow";
+      glow.style.left = `${x}px`;
+      glow.style.top = `${y}px`;
+      glow.style.width = "80px";
+      glow.style.height = "80px";
+      document.body.appendChild(glow);
 
-  collapsed[index] = true;
+      // Show word immediately with the glow
+      showWord(word, x, y);
 
-  const word = revealWords[clickWordIndex];
-  clickWordIndex++;
+      // Phase 1: gentle expansion and brighten
+      requestAnimationFrame(() => {
+        glow.style.transition = "opacity 0.2s ease-out, transform 0.2s ease-out";
+        glow.style.opacity = "1";
+        glow.style.transform = "translate(-50%, -50%) scale(1)";
+      });
 
-  const center = hotspots[index];
+      // Phase 2: fade out glow, word remains
+      setTimeout(() => {
+        glow.style.transition = "opacity 1s ease-in";
+        glow.style.opacity = "0";
+      }, 300);
 
-  // Assign each locked particle a target position at the hotspot center
-  for (const p of particles) {
-    if (p.lockedIndex === index && !p.collapsing) {
-      p.collapsing = true;
-      p.locked = false;
-
-      // collapse inward toward center (gentle, not fast)
-      p.targetX = center.x;
-      p.targetY = center.y;
+      // Phase 3: remove glow element
+      setTimeout(() => {
+        glow.remove();
+      }, 1300);
     }
-  }
 
-  // Fade in the word at the center
-  showWord(word, center.x, center.y);
+    function collapseGalaxy(index) {
+      if (collapsed[index]) return;
+      if (clickWordIndex >= revealWords.length) return;
 
-  // If all galaxies collapsed, trigger the final sequence
-  if (collapsed.every(Boolean) && !allWordsRevealed) {
-    triggerFinalFadeSequence();
-  }
-}
-function triggerFinalFadeSequence() {
-  allWordsRevealed = true;
+      collapsed[index] = true;
 
-  // wait 1s after last word
-  setTimeout(() => {
-    fadeBlack.style.opacity = "1";
-  }, 1000);
+      const word = revealWords[clickWordIndex];
+      clickWordIndex++;
 
-  // after black fully up, show center circle
-  setTimeout(() => {
-    centerCircle.style.opacity = "1";
-    centerCircle.style.pointerEvents = "auto";
-  }, 2000);
-}
+      const center = hotspots[index];
+
+      // Mark particles for fast inward collapse
+      for (const p of particles) {
+        if (p.lockedIndex === index && !p.collapsing) {
+          p.collapsing = true;
+          p.locked = false;
+          p.collapseSpeed = 0.08 + Math.random() * 0.06;
+          p.targetX = center.x;
+          p.targetY = center.y;
+        }
+      }
+
+      // Delay the supernova until particles have rushed inward
+      setTimeout(() => {
+        createSupernovaGlow(center.x, center.y, word);
+      }, 400);
+
+      // If all galaxies collapsed, trigger the final sequence
+      if (collapsed.every(Boolean) && !allWordsRevealed) {
+        triggerFinalFadeSequence();
+      }
+    }
+
+    function triggerFinalFadeSequence() {
+      allWordsRevealed = true;
+
+      // wait 2s after last word (1s for glow + 1s hold)
+      setTimeout(() => {
+        // Fade out all words
+        const words = document.querySelectorAll('.word');
+        words.forEach(w => {
+          w.style.transition = "opacity 2s ease";
+          w.style.opacity = "0";
+        });
+
+        fadeBlack.style.opacity = "1";
+      }, 2000);
+
+      // after black fully up, show center circle
+      setTimeout(() => {
+        centerCircle.style.opacity = "1";
+        centerCircle.style.pointerEvents = "auto";
+      }, 4000);
+    }
 
     centerCircle.addEventListener("click", () => {
       window.location.href = "page14.html";
@@ -269,27 +436,30 @@ function triggerFinalFadeSequence() {
           : [];
 
       for (const p of particles) {
-        // collapsing into word shape
-// gentler, drifting collapse
-// collapsing inward toward hotspot center
-if (p.collapsing) {
-  if (p.targetX != null && p.targetY != null) {
+        // collapsing into supernova
+        if (p.collapsing) {
+          if (p.targetX != null && p.targetY != null) {
+            // Fast inward rush - accelerating
+            const dx = p.targetX - p.x;
+            const dy = p.targetY - p.y;
+            const dist = Math.hypot(dx, dy);
 
-    // gentle inward pull (slower and softer)
-    p.x += (p.targetX - p.x) * 0.06;
-    p.y += (p.targetY - p.y) * 0.06;
+            // Accelerate as they get closer
+            const speed = p.collapseSpeed || 0.1;
+            p.x += dx * speed;
+            p.y += dy * speed;
 
-    // VERY light drift (remove the futuristic effect)
-    p.x += (Math.random() - 0.5) * 0.15;
-    p.y += (Math.random() - 0.5) * 0.15;
-  }
+            // Fade out as they converge
+            if (dist < 50) {
+              p.fadeProgress *= 0.92;
+            } else {
+              p.fadeProgress *= 0.98;
+            }
+          }
 
-  // slow fade-out while collapsing inward
-  p.fadeProgress *= 0.97;
-
-  drawParticle(p, now, 0);
-  continue;
-}
+          drawParticle(p, now, 0);
+          continue;
+        }
 
         if (p.locked) {
           twirlAroundHotspot(p, now);
@@ -297,15 +467,17 @@ if (p.collapsing) {
         }
 
         if (allHotspotsLocked) {
-          // background: hold & drift slowly, don’t disappear
+          // background: hold & drift slowly, don't disappear
           p.vx *= 0.985;
           p.vy *= 0.985;
           p.vx += (Math.random() - 0.5) * 0.004;
           p.vy += (Math.random() - 0.5) * 0.004;
         } else {
-          addIdleDrift(p);
+          // Always add gentle drift
+          addIdleDrift(p, now);
           repelFromMouse(p);
-          const pulseBoost = bundleTowardsHotspot(p, activeHotspots);
+          applyDiffusion(p, particles);
+          const pulseBoost = bundleTowardsHotspot(p, activeHotspots, now);
 
           p.x += p.vx;
           p.y += p.vy;
@@ -316,9 +488,13 @@ if (p.collapsing) {
           p.x = Math.max(0, Math.min(canvas.width, p.x));
           p.y = Math.max(0, Math.min(canvas.height, p.y));
 
-          const damping = mouse.active ? 0.94 : 0.985;
+          // Stronger damping for calmer movement
+          const damping = 0.985;
           p.vx *= damping;
           p.vy *= damping;
+
+          // Keep movement going but capped
+          maintainMinimumVelocity(p);
 
           drawParticle(p, now, pulseBoost);
           continue;
@@ -368,7 +544,7 @@ if (p.collapsing) {
       if (!target) return;
 
       lockedHotspots[targetIndex] = true;
-      const lockRadius = 150;
+      const lockRadius = 180;
 
       for (const p of particles) {
         const dx = p.x - target.x;
@@ -377,8 +553,22 @@ if (p.collapsing) {
         if (!p.locked && dist < lockRadius) {
           p.locked = true;
           p.lockedIndex = targetIndex;
-          p.orbitRadius = Math.max(20, Math.min(90, dist || 20));
+
+          // Start orbit radius at current distance from center
+          p.orbitRadius = Math.max(5, dist);
+
+          // Target radius - varied, biased toward center
+          const radiusFactor = Math.random() * Math.random();
+          p.targetOrbitRadius = 15 + radiusFactor * 95;
+
+          // Start angle from current position
           p.orbitAngle = Math.atan2(dy, dx);
+          p.orbitSpeed = 0.0003 + Math.random() * 0.0025;
+          p.orbitEccentricity = 0.4 + Math.random() * 0.5;
+          p.orbitTilt = Math.random() * Math.PI * 2;
+          p.radialDrift = (Math.random() - 0.5) * 0.015;
+          p.lockTransition = 0; // start transition
+
           p.vx = 0;
           p.vy = 0;
         }
