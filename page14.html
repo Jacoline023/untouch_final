@@ -553,9 +553,9 @@
         }
     }
 
-    document.addEventListener("mousemove", startAudioOnInteraction, { once: true });
+    // Note: mousemove doesn't count as user gesture for audio in modern browsers
     document.addEventListener("click", startAudioOnInteraction, { once: true });
-    document.addEventListener("touchstart", startAudioOnInteraction, { once: true }); // allow touch-only devices to start audio
+    document.addEventListener("touchstart", startAudioOnInteraction, { once: true });
     document.addEventListener("pointerdown", startAudioOnInteraction, { once: true });
 
     function playStatic(duration = 0.16) {
