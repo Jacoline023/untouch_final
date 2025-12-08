@@ -173,16 +173,60 @@
         padding: 0;
         border: none;
     }
+
+    /* Intro overlay with circle */
+    #introOverlay {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        transition: opacity 1.5s ease;
+    }
+    #introOverlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+    #introCircle {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #fff;
+        opacity: 0;
+        cursor: pointer;
+        transition: opacity 1.2s ease, box-shadow 0.4s ease;
+        box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+    }
+    #introCircle.visible {
+        opacity: 1;
+    }
+    #introCircle:hover {
+        box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.6);
+    }
+
+    /* Hide main content initially */
+    #backgroundLayer.hidden,
+    #promptLayer.hidden,
+    #shadeOverlay.hidden {
+        opacity: 0;
+    }
 </style>
 
 </head>
 <body>
 
+<!-- Intro overlay with circle -->
+<div id="introOverlay">
+    <div id="introCircle"></div>
+</div>
+
 <audio id="ambientAudio" loop preload="auto" playsinline>
     <source src="meet_her.mp3" type="audio/mpeg">
 </audio>
 
-<div id="backgroundLayer">
+<div id="backgroundLayer" class="hidden">
 
     <!-- LEFT MAN -->
     <pre id="leftMan">
@@ -418,7 +462,7 @@
 </div>
 
 <!-- Hover/click overlay -->
-<div id="promptLayer">
+<div id="promptLayer" class="hidden">
     <div id="hitLeft" class="hitbox"></div>
     <div id="hitRight" class="hitbox"></div>
     <div id="leftPrompt" class="linePrompt"></div>
@@ -435,12 +479,46 @@
 </div>
 
 <!-- DARK OVERLAY -->
-<div id="shadeOverlay">
+<div id="shadeOverlay" class="hidden">
     <div id="shadeLeft"></div>
     <div id="shadeRight"></div>
 </div>
 
 <script>
+    /* -------------------------------
+       Intro Circle Logic
+    --------------------------------*/
+    const introOverlay = document.getElementById("introOverlay");
+    const introCircle = document.getElementById("introCircle");
+    const backgroundLayer = document.getElementById("backgroundLayer");
+    const promptLayer = document.getElementById("promptLayer");
+    let introComplete = false;
+
+    // Fade in the circle after a short delay
+    setTimeout(() => {
+        introCircle.classList.add("visible");
+    }, 500);
+
+    // Handle circle click - transition to main scene
+    introCircle.addEventListener("click", () => {
+        if (introComplete) return;
+        introComplete = true;
+
+        // Start audio on this user gesture
+        startAudioOnInteraction();
+
+        // Fade out circle first
+        introCircle.classList.remove("visible");
+
+        // After circle fades, fade out overlay and show main content
+        setTimeout(() => {
+            introOverlay.classList.add("hidden");
+            backgroundLayer.classList.remove("hidden");
+            promptLayer.classList.remove("hidden");
+            document.getElementById("shadeOverlay").classList.remove("hidden");
+        }, 800);
+    });
+
     /* -------------------------------
        Spotlight Window Logic
     --------------------------------*/
@@ -553,10 +631,7 @@
         }
     }
 
-    // Note: mousemove doesn't count as user gesture for audio in modern browsers
-    document.addEventListener("click", startAudioOnInteraction, { once: true });
-    document.addEventListener("touchstart", startAudioOnInteraction, { once: true });
-    document.addEventListener("pointerdown", startAudioOnInteraction, { once: true });
+    // Audio is started by intro circle click
 
     function playStatic(duration = 0.16) {
         const ctx = ensureAudioContext();
