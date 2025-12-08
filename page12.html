@@ -40,27 +40,6 @@
       z-index: 5;
     }
 
-    #centerCircle {
-      position: fixed;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #fff;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      opacity: 0;
-      transition: opacity 1.2s ease, box-shadow 0.4s ease;
-      cursor: pointer;
-      z-index: 6;
-      pointer-events: none;
-      box-shadow: 0 0 0 rgba(255, 255, 255, 0);
-    }
-
-    #centerCircle:hover {
-      box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.6);
-    }
-
     .supernova-glow {
       position: absolute;
       border-radius: 50%;
@@ -75,14 +54,12 @@
 <body>
   <canvas id="particleCanvas" aria-hidden="true"></canvas>
   <div id="fadeBlack"></div>
-  <div id="centerCircle"></div>
 
   <script>
     const canvas = document.getElementById('particleCanvas');
     const ctx = canvas.getContext('2d');
 
     const fadeBlack = document.getElementById('fadeBlack');
-    const centerCircle = document.getElementById('centerCircle');
 
     const symbols = ['*','@','#','~','+','%','&','?',';',':'];
 
@@ -409,16 +386,11 @@
         fadeBlack.style.opacity = "1";
       }, 2000);
 
-      // after black fully up, show center circle
+      // after black fully up, go to page14
       setTimeout(() => {
-        centerCircle.style.opacity = "1";
-        centerCircle.style.pointerEvents = "auto";
-      }, 4000);
+        window.location.href = "page14.html";
+      }, 4500);
     }
-
-    centerCircle.addEventListener("click", () => {
-      window.location.href = "page14.html";
-    });
 
     function update() {
       const now = performance.now();
