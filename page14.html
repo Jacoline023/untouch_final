@@ -178,6 +178,10 @@
 </head>
 <body>
 
+<audio id="ambientAudio" loop preload="auto" playsinline>
+    <source src="meet_her.wav" type="audio/wav">
+</audio>
+
 <div id="backgroundLayer">
 
     <!-- LEFT MAN -->
@@ -207,7 +211,6 @@
                                                ..::::---====::
                                                   :::-------.
                                                     .::::::
-
 
 
 
@@ -516,6 +519,102 @@
     let leftTarget = 0, rightTarget = 0;
     let leftVis = 0, rightVis = 0;
 
+    // Audio setup
+    const ambientAudio = document.getElementById("ambientAudio");
+    let audioStarted = false;
+    let currentVolume = 0;
+    const MAX_VOLUME = 0.7; // adjust as needed (0-1)
+    let audioFading = false;
+    const FADE_OUT_MS = 2000;
+    let audioCtx = null;
+
+    function ensureAudioContext() {
+        if (!audioCtx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return null;
+            audioCtx = new Ctx();
+        }
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+        }
+        return audioCtx;
+    }
+
+    function startAudioOnInteraction() {
+        ensureAudioContext();
+        if (!audioStarted) {
+            ambientAudio.volume = 0;
+            ambientAudio.play()
+                .then(() => {
+                })
+                .catch((err) => {
+                });
+            audioStarted = true;
+        }
+    }
+
+    document.addEventListener("mousemove", startAudioOnInteraction, { once: true });
+    document.addEventListener("click", startAudioOnInteraction, { once: true });
+    document.addEventListener("touchstart", startAudioOnInteraction, { once: true }); // allow touch-only devices to start audio
+    document.addEventListener("pointerdown", startAudioOnInteraction, { once: true });
+
+    function playStatic(duration = 0.16) {
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+        const sr = ctx.sampleRate;
+        const frames = Math.floor(sr * duration);
+        const buffer = ctx.createBuffer(1, frames, sr);
+        const data = buffer.getChannelData(0);
+        const blockSize = Math.max(1, Math.floor(sr * 0.0025)); // ~2.5ms sample-and-hold for grain
+        let hold = 0;
+        for (let i = 0; i < frames; i++) {
+            const t = i / frames;
+            if (i % blockSize === 0) {
+                hold = (Math.random() * 2 - 1);
+            }
+            const burstBoost = t < 0.1 ? 1.45 : 1; // quick pop at the start
+            const fade = 1 - Math.max(0, (t - 0.75) / 0.25); // slight tail fade
+            const grain = hold + (Math.random() * 0.22 - 0.11); // jitter within the held block
+            data[i] = grain * 0.55 * burstBoost * fade;
+        }
+        const src = ctx.createBufferSource();
+        const hp = ctx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 300; // telephone low cutoff
+        const band = ctx.createBiquadFilter();
+        band.type = "bandpass";
+        band.frequency.value = 1700; // telephone mid focus
+        band.Q.value = 2.2;
+        const lp = ctx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = 3400; // telephone high cutoff
+        const gain = ctx.createGain();
+        gain.gain.value = 0.24;
+        src.buffer = buffer;
+        src.connect(hp).connect(band).connect(lp).connect(gain).connect(ctx.destination);
+        src.start();
+    }
+
+    function fadeOutAudio(duration = FADE_OUT_MS) {
+        if (!audioStarted || audioFading) return;
+        audioFading = true;
+        const startVol = ambientAudio.volume;
+        const start = performance.now();
+        function step(ts) {
+            const t = Math.min(1, (ts - start) / duration);
+            const vol = startVol * (1 - t);
+            ambientAudio.volume = vol;
+            currentVolume = vol;
+            if (t < 1) {
+                requestAnimationFrame(step);
+            } else {
+                ambientAudio.pause();
+                ambientAudio.currentTime = 0;
+            }
+        }
+        requestAnimationFrame(step);
+    }
+
     function setEdgeTargets(x) {
         const nx = x / window.innerWidth;
         leftTarget = Math.max(0, Math.min(1, (0.5 - nx) / 0.5));   // 1 at far left, 0 at center/right
@@ -537,6 +636,20 @@
 
         leftEl.style.opacity = 0.1 + leftVis * 0.9;
         rightEl.style.opacity = 0.1 + rightVis * 0.9;
+
+        if (audioStarted && !audioFading) {
+            // Volume: logistic rise outward, with a silent 20% band at center
+            const nx = targetX / window.innerWidth;
+            const distFromCenter = Math.abs(nx - 0.5) * 2; // 0 at center, 1 at edges
+            const bandHalf = 0.1; // 20% total width (10% each side)
+            // Logistic curve mapped so value is 0 at band edge and approaches 1 near edges
+            const logistic = (x) => 1 / (1 + Math.exp(-8 * (x - bandHalf)));
+            const base = logistic(bandHalf); // normalize so band edge = 0
+            const volShape = Math.max(0, (logistic(distFromCenter) - base) / (1 - base));
+            const targetVolume = volShape * MAX_VOLUME;
+            currentVolume += (targetVolume - currentVolume) * 0.12; // smooth transition
+            ambientAudio.volume = currentVolume;
+        }
 
         requestAnimationFrame(animateEdges);
     }
@@ -568,11 +681,12 @@
     function triggerEnding() {
         promptsDone = true;
         clearPrompts();
+        fadeOutAudio();
         endOverlay.classList.add("active");
         // hold at black before showing title
         setTimeout(() => {
             endOverlay.classList.add("showTitle");
-        }, 2000);
+        }, 3200); // extended pause before title appears
     }
 
     function clearPrompts() {
@@ -635,12 +749,20 @@
     hitRight.addEventListener("click", () => advancePrompt("right"));
 
     endMessage.addEventListener("click", () => {
+        playStatic();
         endMessage.style.display = "none";
         endOverlay.classList.add("showChoices");
         endChoices.innerHTML = `
             <a href="page15.html">[drink with him]</a>
             <a href="page15.html">[fight him]</a>
         `;
+    });
+
+    // Static sfx when choosing an option
+    endChoices.addEventListener("pointerdown", (e) => {
+        if (e.target && e.target.tagName === "A") {
+            playStatic(0.1);
+        }
     });
 
     /* ----------------------------------
