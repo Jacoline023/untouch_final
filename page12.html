@@ -492,6 +492,21 @@
         y: e.clientY - r.top,
         active: true
       };
+
+      // Show pointer cursor when hovering over clickable galaxies
+      if (allHotspotsLocked) {
+        let overGalaxy = false;
+        for (let i = 0; i < hotspots.length; i++) {
+          if (collapsed[i]) continue;
+          const h = hotspots[i];
+          const dist = Math.hypot(h.x - mouse.x, h.y - mouse.y);
+          if (dist < 60) {
+            overGalaxy = true;
+            break;
+          }
+        }
+        canvas.style.cursor = overGalaxy ? 'pointer' : 'default';
+      }
     });
 
     canvas.addEventListener('mouseleave', () => {
