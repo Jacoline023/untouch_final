@@ -106,37 +106,37 @@
 <div id="container">
 
 <pre id="silhouette">
-                                                                                                  
-                                                  :--.                                           
-                                                --=====:.                                        
-                                                ==++--+=:                                        
-                                                +*#+-+**                                         
-                                              -:*#**=*#*-.                                       
-                                              =:===-:-=:.=                                       
-                                               -+#=-:-+*-                                        
-                                                ++=-:---                                         
-                                                **+=-=:.                                         
-                                              #**###*++-=                                        
-                                               **+**++==                                         
-                                                :++++++:                                         
-                                                  .==:                                           
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                               .                                 
-                                ===    =                      =                                  
-                               -++++=+*.                      *#+=++=                            
-                               =+++++* .                       +*++++-                           
-                               =+++++:                          ***++=                           
-                               =+++**  .                        :#***+                           
-                              :++*#*   .                         ###**                           
-                              -+++**                             ###**=                          
-                              -+++*+                             **#*+=                          
-                              :+++++                             =##*+=                          
-                               +++++                              ##++-                          
-                               =+=++                              **++:                          
-                               =++++                              =*++                           
+
+                                                  :--.
+                                                --=====:.
+                                                ==++--+=:
+                                                +*#+-+**
+                                              -:*#**=*#*-.
+                                              =:===-:-=:.=
+                                               -+#=-:-+*-
+                                                ++=-:---
+                                                **+=-=:.
+                                              #**###*++-=
+                                               **+**++==
+                                                :++++++:
+                                                  .==:
+
+
+
+
+                                                               .
+                                ===    =                      =
+                               -++++=+*.                      *#+=++=
+                               =+++++* .                       +*++++-
+                               =+++++:                          ***++=
+                               =+++**  .                        :#***+
+                              :++*#*   .                         ###**
+                              -+++**                             ###**=
+                              -+++*+                             **#*+=
+                              :+++++                             =##*+=
+                               +++++                              ##++-
+                               =+=++                              **++:
+                               =++++                              =*++
                                .++++                              -*++                           </pre>
 
 <div id="answer-box"></div>
@@ -144,7 +144,7 @@
 <div id="questions">
     <div class="question" data-answer="and you still stay.">-> i know what you are.</div>
     <div class="question" data-answer="funny you say that to me.">-> i will not apologize for admiring her mind.</div>
-    <div class="question" data-answer="you’ve never fought me honestly.">-> i will not surrender her, not even to angels.</div>
+    <div class="question" data-answer="you've never fought me honestly.">-> i will not surrender her, not even to angels.</div>
     <div class="question" data-answer="then why does she look at you?">-> you may claim her body; her soul is not yours.</div>
 </div>
 
@@ -158,6 +158,46 @@ const questionsBox = document.getElementById("questions");
 
 let usedCount = 0;
 let typingInterval = null;
+let typingSoundInterval = null;
+let audioCtx = null;
+
+function ensureAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+    }
+}
+
+function playClickSound() {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    osc.type = "square";
+    osc.frequency.value = 420 + Math.random() * 80; // lower pitch for a softer click
+    gain.gain.value = 0.04; // quieter
+    filter.type = "lowpass";
+    filter.frequency.value = 1400; // muffle high end
+    osc.connect(filter).connect(gain).connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playTypingTick() {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 620 + (Math.random() * 20 - 10); // tight variance for morse-like beeps
+    gain.gain.value = 0.035;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.07);
+    osc.stop(audioCtx.currentTime + 0.08);
+}
 
 // Fade in silhouette, then questions
 window.addEventListener("load", () => {
@@ -170,9 +210,14 @@ window.addEventListener("load", () => {
 });
 
 function typeAnswer(text) {
+    ensureAudio();
     if (typingInterval) {
         clearInterval(typingInterval);
         typingInterval = null;
+    }
+    if (typingSoundInterval) {
+        clearInterval(typingSoundInterval);
+        typingSoundInterval = null;
     }
     answerBox.innerHTML = "";
     const textSpan = document.createElement("span");
@@ -183,18 +228,26 @@ function typeAnswer(text) {
     answerBox.appendChild(caretSpan);
 
     let i = 0;
+    typingSoundInterval = setInterval(() => {
+        playTypingTick();
+    }, 90);
     typingInterval = setInterval(() => {
         textSpan.textContent = text.slice(0, i);
         i++;
         if (i > text.length) {
             clearInterval(typingInterval);
             typingInterval = null;
+            if (typingSoundInterval) {
+                clearInterval(typingSoundInterval);
+                typingSoundInterval = null;
+            }
         }
     }, 30);
 }
 
 questions.forEach(q => {
     q.addEventListener("click", () => {
+        playClickSound();
         questions.forEach(el => el.classList.remove("dimmed"));
         const answer = q.dataset.answer;
         setTimeout(() => typeAnswer(answer), 400);
