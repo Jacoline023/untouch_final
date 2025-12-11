@@ -127,6 +127,290 @@
 const out = document.getElementById("output");
 const cursor = document.getElementById("cursor");
 let locked = false;
+let audioCtx = null;
+let typingSoundInterval = null;
+let charDelayScale = 1;
+let typingGainScale = 1;
+let typingFreqBase = 620;
+let typingFreqJitter = 20;
+let pitchDropActive = false;
+let pitchDropOffset = 0;
+let glitchBedSource = null;
+let glitchBedGain = null;
+let glitchRingOsc = null;
+let glitchRingGain = null;
+let glitchRingLfo = null;
+let glitchRingLfoGain = null;
+let glitchBedLfo = null;
+let glitchBedLfoGain = null;
+
+const softHerLines = new Set([
+    "i am not the one you seek",
+    "but i can hold your longing",
+    "for a while",
+    "she exists without you",
+    "is it she that loves you,",
+    'or an entity defined by "love"?'
+]);
+const softPauseRange = [800, 1300]; // ms of hesitation around soft section
+
+function ensureAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+    }
+}
+
+function playClickSound() {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    osc.type = "square";
+    osc.frequency.value = 420 + Math.random() * 80; // softer click
+    gain.gain.value = 0.04;
+    filter.type = "lowpass";
+    filter.frequency.value = 1400;
+    osc.connect(filter).connect(gain).connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playOkChirp() {
+    ensureAudio();
+    const now = audioCtx.currentTime;
+
+    const chirp = (start, freq) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square";
+        osc.frequency.value = freq; // sharp, 8-bit style
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.12, start + 0.01); // slightly quieter
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.07);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + 0.09);
+    };
+
+    // One-shot double chirp ~0.3s total
+    chirp(now, 2100);
+    chirp(now + 0.14, 2500);
+}
+
+function playErrorBuzz() {
+    ensureAudio();
+    const now = audioCtx.currentTime;
+
+    const firePulse = (start) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        osc.type = "sawtooth";
+        osc.frequency.value = 60; // deeper buzz
+        osc.detune.setValueAtTime(240, start); // keep bite/aliasing
+
+        // mild waveshaping for distortion
+        const shaper = audioCtx.createWaveShaper();
+        const curve = new Float32Array(512);
+        for (let i = 0; i < curve.length; i++) {
+            const x = (i / (curve.length - 1)) * 2 - 1;
+            curve[i] = Math.tanh(6 * x);
+        }
+        shaper.curve = curve;
+        shaper.oversample = "4x";
+
+        gain.gain.setValueAtTime(0.0001, start);
+        const peak = pitchDropActive ? 0.6 : 0.42; // louder during drop
+        gain.gain.exponentialRampToValueAtTime(peak, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(680, start);
+        filter.Q.value = 1.6;
+
+        osc.connect(shaper).connect(filter).connect(gain).connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + 0.24);
+    };
+
+    firePulse(now);
+    firePulse(now + 0.16); // double harsh buzz
+}
+
+function startGlitchBed() {
+    ensureAudio();
+    if (glitchBedSource) return;
+
+    const noiseDur = 2.0;
+    const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * noiseDur), audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+        // smoother noise bed, no spikes
+        data[i] = (Math.random() * 0.12 - 0.06);
+    }
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 620;
+    filter.Q.value = 0.12;
+
+    const shelf = audioCtx.createBiquadFilter();
+    shelf.type = "highshelf";
+    shelf.frequency.value = 2000;
+    shelf.gain.value = 3;
+
+    // extra smoothing layer
+    const smooth = audioCtx.createBiquadFilter();
+    smooth.type = "lowpass";
+    smooth.frequency.value = 1200;
+
+    const gain = audioCtx.createGain();
+    const now = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0.003, now);
+    const target = 0.12;
+    const steps = 64;
+    const curve = new Float32Array(steps);
+    for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        // Log-ish curve: slow rise then quicker lift near the end
+        const eased = Math.log10(1 + 9 * t); // 0 → 1
+        curve[i] = 0.0001 + eased * (target - 0.0001);
+    }
+    gain.gain.setValueCurveAtTime(curve, now, 1.5); // slower fade in
+
+    // Swell the noise bed with a gentle LFO
+    const bedLfo = audioCtx.createOscillator();
+    const bedLfoGain = audioCtx.createGain();
+    bedLfo.frequency.value = 0.55; // slow swell
+    bedLfoGain.gain.value = target * 0.12; // shallower swell depth
+    bedLfo.connect(bedLfoGain).connect(gain.gain);
+
+    source.connect(filter).connect(shelf).connect(smooth).connect(gain);
+    source.start();
+    bedLfo.start(now);
+    glitchBedSource = source;
+    glitchBedGain = gain;
+    glitchBedLfo = bedLfo;
+    glitchBedLfoGain = bedLfoGain;
+
+    // High, tinnitus-like ring with gentle pulsation (fixed faint level)
+    const ringOsc = audioCtx.createOscillator();
+    const ringGain = audioCtx.createGain();
+    const ringShaper = audioCtx.createWaveShaper();
+
+    ringOsc.type = "sine";
+    ringOsc.frequency.value = 2600; // lower, less piercing
+
+    const ringMax = 0.002;
+    ringGain.gain.setValueAtTime(0.0001, now);
+    ringGain.gain.exponentialRampToValueAtTime(ringMax, now + 1.5); // fade ring into noise
+
+    const ringCurve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+        const x = (i / 255) * 2 - 1;
+        ringCurve[i] = Math.tanh(1.5 * x); // mild distortion to widen tone
+    }
+    ringShaper.curve = ringCurve;
+
+    // LFO for very gentle pulsation
+    const lfo = audioCtx.createOscillator();
+    const lfoGain = audioCtx.createGain();
+
+    lfo.frequency.value = 0.55; // synced with bed
+    lfoGain.gain.value = ringMax * 0.12;  // subtle modulation
+
+    lfo.connect(lfoGain).connect(ringGain.gain);
+
+    // Master smoothing for both bed and ring
+    masterSmooth = audioCtx.createBiquadFilter();
+    masterSmooth.type = "lowpass";
+    masterSmooth.frequency.value = 8000;
+
+    ringOsc.connect(ringShaper).connect(ringGain).connect(masterSmooth);
+    gain.connect(masterSmooth);
+    masterSmooth.connect(audioCtx.destination);
+
+    ringOsc.start(now + 0.15);
+    lfo.start(now + 0.15);
+
+    glitchRingOsc = ringOsc;
+    glitchRingGain = ringGain;
+    glitchRingLfo = lfo;
+    glitchRingLfoGain = lfoGain;
+}
+
+function stopGlitchBedWithSnap() {
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    if (glitchBedGain) {
+        glitchBedGain.gain.cancelScheduledValues(now);
+        glitchBedGain.gain.setValueAtTime(glitchBedGain.gain.value, now);
+        glitchBedGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    }
+    if (glitchBedSource) {
+        glitchBedSource.stop(now + 0.1);
+        glitchBedSource = null;
+        glitchBedGain = null;
+    }
+    if (glitchBedLfo) {
+        glitchBedLfo.stop(now + 0.1);
+        glitchBedLfo = null;
+        glitchBedLfoGain = null;
+    }
+
+    if (glitchRingGain) {
+        glitchRingGain.gain.cancelScheduledValues(now);
+        glitchRingGain.gain.setValueAtTime(glitchRingGain.gain.value, now);
+        glitchRingGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    }
+    if (glitchRingOsc) {
+        glitchRingOsc.stop(now + 0.1);
+        glitchRingOsc = null;
+    }
+    if (glitchRingLfo) {
+        glitchRingLfo.stop(now + 0.1);
+        glitchRingLfo = null;
+        glitchRingLfoGain = null;
+    }
+
+    // small static snap
+    const snapDur = 0.08;
+    const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * snapDur), audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    const snap = audioCtx.createBufferSource();
+    snap.buffer = buffer;
+    const snapGain = audioCtx.createGain();
+    snapGain.gain.setValueAtTime(0.6, now); // much louder snap
+    snapGain.gain.exponentialRampToValueAtTime(0.0001, now + snapDur);
+    snap.connect(snapGain).connect(audioCtx.destination);
+    snap.start(now);
+    snap.stop(now + snapDur);
+}
+
+function playTypingTick() {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    const jitter = typingFreqJitter;
+    osc.frequency.value = typingFreqBase + (Math.random() * jitter - jitter / 2); // tight variance
+    gain.gain.value = 0.035 * typingGainScale;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.07);
+    osc.stop(audioCtx.currentTime + 0.08);
+}
 
 /* ----------------- TYPEWRITER ----------------- */
 
@@ -177,6 +461,7 @@ function typeLine(line, isSystemLine = false) {
     
     // Detect if this is a "system" line (brackets, dots sequences, technical)
     const looksLikeSystem = colorClass || /^\[|\.{3,}|ERROR|OK|FAILED/.test(content);
+    const isDashLine = /^-+\s*$/.test(content.trim());
 
     const lineEl = document.createElement("div");
     out.appendChild(lineEl);
@@ -187,6 +472,11 @@ function typeLine(line, isSystemLine = false) {
             if (colorClass) lineEl.classList.add(colorClass);
             resolve();
             return;
+        }
+
+        if (!typingSoundInterval) {
+            const tickMs = 90 * charDelayScale;
+            typingSoundInterval = setInterval(playTypingTick, tickMs);
         }
 
         let idx = 0;
@@ -220,10 +510,18 @@ function typeLine(line, isSystemLine = false) {
                     moveCursor(lineEl);
                 }
                 
-                const delay = charDelay(ch, prevCh, nextCh, posInWord);
+                let delay = charDelay(ch, prevCh, nextCh, posInWord);
+                if (isDashLine) {
+                    delay *= 0.25; // blast through dashed separators
+                }
+                delay *= charDelayScale;
                 setTimeout(nextChar, delay);
             } else {
                 if (colorClass) lineEl.classList.add(colorClass);
+                if (typingSoundInterval) {
+                    clearInterval(typingSoundInterval);
+                    typingSoundInterval = null;
+                }
                 resolve();
             }
         }
@@ -236,18 +534,87 @@ async function typeSequence(lines, delayBetween=250) {
     cursor.style.display = "inline-block";
     moveCursor(out);
 
+    pitchDropActive = false;
+    pitchDropOffset = 0;
+    let inSoftBlock = false;
+    let dropWasActive = false;
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const isObject = typeof line === "object" && line !== null;
         const content = isObject ? (line.text || "") : (line || "");
         const colorClass = isObject ? line.color : null;
+        const trimmed = content.trim();
+        const isRollbackLine = trimmed.toLowerCase().startsWith("attempting rollback");
+        const isAwaitingLine = trimmed.startsWith("awaiting external instruction_");
+        dropWasActive = pitchDropActive;
         
+        // per-line pacing tweaks
+        charDelayScale = 1;
+        typingGainScale = 1;
+        typingFreqBase = 620;
+        typingFreqJitter = 20;
+        if (isAwaitingLine) {
+            if (dropWasActive) {
+                stopGlitchBedWithSnap();
+            }
+            pitchDropActive = false;
+            pitchDropOffset = 0;
+        } else if (pitchDropActive) {
+            pitchDropOffset += 55; // smaller decrement per line
+            typingFreqBase = Math.max(200, 620 - pitchDropOffset); // progressively lower pitch
+            typingFreqJitter = 16;
+        }
+        if (softHerLines.has(trimmed)) {
+            charDelayScale = 1.35; // slightly slower
+            typingGainScale = 0.45; // quieter ticks
+            typingFreqBase = 780;   // higher pitch for this section
+        }
+
+        const isSoftLine = softHerLines.has(trimmed);
+        const nextContent = (() => {
+            const nxt = lines[i + 1];
+            if (!nxt) return "";
+            const nxtObj = typeof nxt === "object" && nxt !== null;
+            return nxtObj ? (nxt.text || "") : (nxt || "");
+        })();
+        const nextIsSoft = softHerLines.has(nextContent.trim());
+
+        if (isSoftLine && !inSoftBlock) {
+            cursor.style.display = "inline-block";
+            const pause = softPauseRange[0] + Math.random() * (softPauseRange[1] - softPauseRange[0]);
+            await new Promise(r => setTimeout(r, pause));
+            inSoftBlock = true;
+        }
+
         // Detect line type for appropriate pacing
         const isSystemLine = colorClass || /^\[|\.{3,}|ERROR|OK|FAILED|halt/.test(content);
         const isEmptyLine = content.trim().length === 0;
         const isPoeticLine = !isSystemLine && content.length > 0 && !content.includes("---");
         
         await typeLine(line, isSystemLine);
+        if (content.includes("OK")) {
+            playOkChirp();
+        } else if (colorClass === "red") {
+            playErrorBuzz();
+        }
+        if (isRollbackLine) {
+            pitchDropActive = true; // start drop on following lines
+            pitchDropOffset = 0;
+            startGlitchBed();
+        }
+
+        // reset pacing for next line
+        charDelayScale = 1;
+        typingGainScale = 1;
+        typingFreqBase = 620;
+        typingFreqJitter = 20;
+
+        if (isSoftLine && !nextIsSoft) {
+            const pause = softPauseRange[0] + Math.random() * (softPauseRange[1] - softPauseRange[0]);
+            await new Promise(r => setTimeout(r, pause));
+            inSoftBlock = false;
+        }
         
         if (isEmptyLine) {
             // Brief pause for empty lines (visual breath)
@@ -263,6 +630,9 @@ async function typeSequence(lines, delayBetween=250) {
             const jitter = delayBetween + Math.random() * 200;
             await new Promise(r => setTimeout(r, jitter));
         }
+
+        // Extra small pause per line to mimic console load rhythm
+        await new Promise(r => setTimeout(r, 70 + Math.random() * 140));
     }
 
     cursor.style.display = "inline-block";
@@ -306,6 +676,7 @@ async function runSequenceWithPrompt(lines) {
             } else {
                 // Flash red and clear
                 input.classList.add("error");
+                playErrorBuzz();
                 setTimeout(() => {
                     input.classList.remove("error");
                     input.value = "";
@@ -415,16 +786,18 @@ function disableChoices() {
 
 choiceHer.addEventListener("click", () => {
     if (locked) return;
+    playClickSound();
     locked = true;
     disableChoices();
-    runHer();
+    setTimeout(runHer, 1000);
 });
 
 choiceHim.addEventListener("click", () => {
     if (locked) return;
+    playClickSound();
     locked = true;
     disableChoices();
-    runHim();
+    setTimeout(runHim, 1000);
 });
 </script>
 

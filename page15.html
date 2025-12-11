@@ -115,6 +115,47 @@
     const glitchDelay = 1000;
     let glitchScheduled = false;
     const finalText = "the body knows better.";
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function ensureAudioCtx() {
+        if (!AudioCtx) return null;
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        return audioCtx;
+    }
+
+    function playThumps(pulseDuration = 0.9) {
+        const ctx = ensureAudioCtx();
+        if (!ctx) return;
+
+        const thumpCount = Math.floor(Math.random() * 3) + 1; // 1–3 heartbeats
+        let startTime = ctx.currentTime + 0.02;
+
+        // Tie the thump pitch/spacing to the word's pulse animation duration
+        const beatInterval = Math.max(0.16, Math.min(0.55, pulseDuration * 0.45 + (Math.random() * 0.08 - 0.04)));
+
+        for (let i = 0; i < thumpCount; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            // Lower pitch for slower pulses, slightly higher for faster pulses
+            const baseFreq = 42 + (0.6 / pulseDuration) * 22 + Math.random() * 6;
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(baseFreq, startTime);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.6, startTime + 0.12);
+
+            gain.gain.setValueAtTime(0.0001, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.32 + Math.random() * 0.1, startTime + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.22 + Math.random() * 0.06);
+
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.4);
+
+            startTime += beatInterval; // slight variability between beats
+        }
+    }
 
     words.forEach(word => {
         // Give each word its own pulse tempo and starting phase
@@ -123,10 +164,12 @@
         const phaseShift = Math.random() * duration;
         word.style.setProperty("--pulse-duration", `${duration.toFixed(2)}s`);
         word.style.setProperty("--pulse-delay", `${(-phaseShift).toFixed(2)}s`);
+        word.dataset.pulseDuration = duration.toFixed(2);
 
         word.addEventListener("click", () => {
             const part = word.getAttribute("data-part");
 
+            playThumps(parseFloat(word.dataset.pulseDuration) || duration);
             word.classList.add("used");
             clicked.add(part);
 
