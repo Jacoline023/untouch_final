@@ -28,15 +28,33 @@
         bottom: 15px;
         right: 20px;
         font-size: 10px;
-        opacity: 0.45;
+        opacity: 0.35;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.2s ease, box-shadow 0.25s ease;
     }
 
     #credits a {
         color: #ffffff;
         text-decoration: none;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
     }
     #credits a:hover {
-        opacity: 0.8;
+        opacity: 0.65;
+    }
+
+    #credits:hover {
+        opacity: 0.6;
+        box-shadow: 0 0 0 12px rgba(255, 255, 255, 0.04);
     }
 </style>
 </head>
@@ -52,9 +70,205 @@ she was never here.
 </div>
 
 <script>
+    const header = document.getElementById('header');
+    const creditsZone = document.getElementById('credits');
+    const creditsLink = creditsZone.querySelector('a');
+
     setTimeout(() => {
-        document.getElementById('header').style.opacity = '0';
+        header.style.opacity = '0';
     }, 10000);
+
+    let audioCtx = null;
+    function ensureAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume().catch(() => {});
+        }
+    }
+
+    function playClickSound() {
+        ensureAudio();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        osc.type = "square";
+        osc.frequency.value = 420 + Math.random() * 80;
+        gain.gain.value = 0.04;
+        filter.type = "lowpass";
+        filter.frequency.value = 1400;
+        osc.connect(filter).connect(gain).connect(audioCtx.destination);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+        osc.stop(audioCtx.currentTime + 0.1);
+    }
+
+    function playSonarPing(volume = 0.08) {
+        // unused placeholder kept for compatibility
+        playSonarBloom(volume);
+    }
+
+    const activeBlooms = [];
+
+    function playSonarBloom(volume = 0.08) {
+        ensureAudio();
+        const clampedVol = Math.max(0, Math.min(0.08, volume));
+
+        const baseGain = audioCtx.createGain();
+        baseGain.gain.value = 0;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = 850;
+        filter.Q.value = 7.5;
+
+        const baseFreq = 280; // steady low-mid tone
+
+        const fundamental = audioCtx.createOscillator();
+        fundamental.type = "sine";
+        fundamental.frequency.value = baseFreq;
+
+        const overtone = audioCtx.createOscillator();
+        overtone.type = "triangle";
+        overtone.frequency.value = baseFreq * 2;
+        const overtoneGain = audioCtx.createGain();
+        overtoneGain.gain.value = clampedVol * 0.35;
+
+        const lfo = audioCtx.createOscillator();
+        lfo.type = "sine";
+        lfo.frequency.value = 2.0;
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = clampedVol * 0.08; // reduced sway
+        lfo.connect(lfoGain).connect(baseGain.gain);
+
+        const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.0, audioCtx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = (Math.random() * 2 - 1) * 0.08;
+        }
+        const noiseSource = audioCtx.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+        const noiseFilter = audioCtx.createBiquadFilter();
+        noiseFilter.type = "lowpass";
+        noiseFilter.frequency.value = 650;
+        noiseFilter.Q.value = 0.0001;
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.value = clampedVol * 0.08;
+
+        fundamental.connect(filter);
+        overtone.connect(overtoneGain).connect(filter);
+        noiseSource.connect(noiseFilter).connect(noiseGain).connect(filter);
+        filter.connect(baseGain).connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        baseGain.gain.cancelScheduledValues(now);
+        baseGain.gain.setValueAtTime(0, now);
+        baseGain.gain.linearRampToValueAtTime(clampedVol, now + 0.35);
+        baseGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, clampedVol * 0.01), now + 1.8);
+
+        filter.frequency.cancelScheduledValues(now);
+        filter.frequency.setValueAtTime(900, now);
+        filter.frequency.exponentialRampToValueAtTime(520, now + 1.8);
+
+        noiseGain.gain.setValueAtTime(noiseGain.gain.value, now);
+        noiseGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, clampedVol * 0.01), now + 1.6);
+
+        fundamental.start(now);
+        overtone.start(now);
+        lfo.start(now);
+        noiseSource.start(now);
+
+        const stopTime = now + 2.2;
+        fundamental.stop(stopTime);
+        overtone.stop(stopTime);
+        lfo.stop(stopTime);
+        noiseSource.stop(stopTime);
+
+        activeBlooms.push({ gains: [baseGain, noiseGain], oscillators: [fundamental, overtone, lfo, noiseSource] });
+    }
+
+    const bufferRadius = 300; // slightly wider zone for smoother transitions
+    let inZone = false;
+    let sonarInterval = null;
+    let currentVolume = 0;
+
+    function fadeOutActiveBlooms() {
+        const now = audioCtx ? audioCtx.currentTime : 0;
+        while (activeBlooms.length) {
+            const bloom = activeBlooms.pop();
+            bloom.gains.forEach(g => {
+                try {
+                    g.gain.cancelScheduledValues(now);
+                    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+                } catch (e) {}
+            });
+            bloom.oscillators.forEach(node => {
+                try {
+                    node.stop(now + 0.2);
+                } catch (e) {}
+            });
+        }
+    }
+
+    function stopSonar() {
+        // keep interval running; just clear active blooms and let volume settle to zero
+        currentVolume = 0;
+        fadeOutActiveBlooms();
+    }
+
+    function startSonar() {
+        if (!sonarInterval) {
+            sonarInterval = setInterval(() => {
+                if (currentVolume <= 0.002) {
+                    fadeOutActiveBlooms();
+                    return;
+                }
+                playSonarPing(currentVolume);
+            }, 600);
+        }
+    }
+
+    function updateSonarVolumeFromCursor(event) {
+        const rect = creditsZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const dx = event.clientX - centerX;
+        const dy = event.clientY - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        const proximity = Math.max(0, 1 - distance / bufferRadius);
+        const targetVol = proximity * 0.08;
+
+        // Smoothing (keep this)
+        const factor = targetVol < currentVolume ? 0.35 : 0.15;
+        currentVolume += (targetVol - currentVolume) * factor;
+
+        // Detect ENTER zone
+        if (proximity > 0 && !inZone) {
+            inZone = true;        // mark zone entry
+            // DO NOT fade anything here
+        }
+
+        // Detect LEAVE zone (with hysteresis to avoid flicker at the boundary)
+        if (proximity < 0.01 && inZone) {
+            inZone = false;        // mark zone exit
+            fadeOutActiveBlooms(); // fade one time ONLY
+        }
+
+        startSonar();
+    }
+
+    document.addEventListener('mousemove', updateSonarVolumeFromCursor);
+    creditsZone.addEventListener('mouseleave', stopSonar);
+
+    // start sonar loop immediately; volume will stay at 0 until cursor enters radius
+    startSonar();
+
+    creditsLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        window.location.href = creditsLink.getAttribute('href');
+    });
 </script>
 
 </body>
