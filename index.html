@@ -11,31 +11,66 @@
             box-sizing: border-box;
         }
 
-        body {
-            background-color: #000000;
+        html, body {
+            width: 100%;
+            height: 100%;
+            background: #000;
             overflow: hidden;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
         }
 
-        .word {
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
             font-family: 'Courier New', monospace;
+        }
+
+        /* very subtle static */
+        body::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(255, 255, 255, 0.01) 2px,
+                    rgba(255, 255, 255, 0.01) 4px
+                );
+            pointer-events: none;
+            opacity: 0.1;
+            z-index: 3;
+        }
+
+        .intro {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            z-index: 2;
+        }
+
+        .title {
             font-size: 48px;
-            color: #ffffff;
+            color: #fff;
             text-decoration: none;
             position: relative;
             animation: glitch-subtle 2s infinite;
+            cursor: pointer;
+            text-shadow: none;
+            transition: color 0.3s ease, text-shadow 0.3s ease;
         }
 
-        .word:hover {
+        .title:hover {
             color: #00ff00;
-            cursor: pointer;
             text-shadow: 0 0 10px #00ff00;
         }
 
-        /* Subtle glitch - only occasional flickers */
+        /* Subtle glitch for the title */
         @keyframes glitch-subtle {
             0%, 95% {
                 transform: translate(0);
@@ -55,28 +90,275 @@
             }
         }
 
-        /* Very subtle static - barely visible */
-        body::before {
+        /* silhouette layer */
+        .ascii-layer {
+            opacity: 0;
+            position: relative;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .ascii-layer::after {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: 
+            inset: -8px;
+            background-image:
+                repeating-linear-gradient(
+                    90deg,
+                    rgba(255,255,255,0.04),
+                    rgba(255,255,255,0.04) 1px,
+                    transparent 1px,
+                    transparent 2px
+                ),
                 repeating-linear-gradient(
                     0deg,
-                    transparent,
-                    transparent 2px,
-                    rgba(255, 255, 255, 0.01) 2px,
-                    rgba(255, 255, 255, 0.01) 4px
+                    rgba(255,255,255,0.02),
+                    rgba(255,255,255,0.02) 1px,
+                    transparent 1px,
+                    transparent 3px
                 );
+            mix-blend-mode: screen;
+            opacity: 0;
             pointer-events: none;
-            opacity: 0.1;
+            transition: opacity 0.2s ease;
+            z-index: 3;
+            animation: staticHum 0.4s steps(2, end) infinite paused;
+        }
+
+        .ascii-layer:hover::after {
+            opacity: 0.15;
+            animation-play-state: running;
+        }
+
+        .ascii-layer.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        @keyframes staticHum {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(1px, -1px); }
+            50% { transform: translate(-1px, 1px); }
+            75% { transform: translate(0.5px, -0.5px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        /* MAIN ASCII CONTAINER */
+        pre.ascii {
+            font-size: 13px;
+            line-height: 1.0;
+            color: #ffffff;
+            white-space: pre;
+            margin: 0;
+            padding: 0;
+            z-index: 1;
+        }
+
+        /* Glitch motion on the silhouette text */
+        .glitch-text {
+            display: inline;
+            animation: subtleGlitch 3s infinite;
+        }
+
+        @keyframes subtleGlitch {
+            0%, 100% {
+                transform: translate(0, 0);
+                filter: blur(0px);
+            }
+            10% {
+                transform: translate(-0.5px, 0.5px);
+                filter: blur(0.2px);
+            }
+            20% {
+                transform: translate(0.5px, -0.5px);
+            }
+            30% {
+                transform: translate(0, 0);
+            }
+            40% {
+                transform: translate(0.3px, 0);
+            }
+            50% {
+                transform: translate(0, 0);
+            }
+            60% {
+                transform: translate(-0.3px, 0.3px);
+            }
+            70% {
+                transform: translate(0, 0);
+            }
+            80% {
+                transform: translate(0.4px, -0.2px);
+                filter: blur(0.1px);
+            }
+            90% {
+                transform: translate(0, 0);
+            }
+        }
+
+        /* CLICKABLE WORDS — FIXED, NEVER SHAKE */
+        .link-word {
+            color: #ff0000;
+            text-decoration: none;
+            position: relative;
+            z-index: 2;
+        }
+
+        .link-word:hover {
+            color: #00ff00;
+            text-shadow: 0 0 5px #00ff00;
         }
     </style>
 </head>
 <body>
-    <a href="page2.html" class="word">untouch</a>
+    <div id="intro" class="intro">
+        <div id="title" class="title" role="button" tabindex="0" aria-label="Reveal silhouette">untouch</div>
+    </div>
+
+    <div id="asciiLayer" class="ascii-layer">
+        <pre class="ascii"><span class="glitch-text">
+
+
+
+                                                                      .::::.
+                                                                  .-+*+++**#*=
+                                                                 =:..:---=====+:
+                                                                -:....::---==-==-
+                                                               .-:...:::----===+=.
+                                                               :..:+*+=-::=##%*==.
+                                                              .:...:=*=..-****===.
+                                                             :::..:+</span><a href="page3.html" class="link-word" data-text="eye">eye</a><span class="glitch-text">*::+</span><a href="page3.html" class="link-word" data-text="eye">eye</a><span class="glitch-text">##=++:
+                                                             -::...:-:.:-==++=---=:
+                                                             .-.....-::::====----*.
+                                                              ...:..:::-=#*+=-:==-
+                                                                ....-</span><a href="page4.html" class="link-word" data-text="mouth">mouth</a><span class="glitch-text">#*+=--
+                                                                 ...:::-=+=*+=-.
+                                                                 ::::::-=*+++=:
+                                                                 ..--::--+***+.
+                                                                 ...::=*###*+=:
+                                                                .......:=======-
+                                                                :......-====+*@==-:
+                                                            .... .=:..:-+*#@%*-===-==-:.
+                                                        ....:.....   -*#=-=-:-==+=====----.
+                                                    ....::.............=+===++===------:::-:-:
+                                                 ......:-...........::-:-=++=-=---------::-::--:
+                                                 ..:...--............----*+-:-----------:.:::---.
+                                                ...:..:=:............:.:+-=::::---:-----:..:=-=:-.
+                                                ......:-:...........</span><a href="page5.html" class="link-word" data-text="chest">chest</a><span class="glitch-text">:::::::::---:::::+-+-:.
+                                                : ..  .::..............:::=:.::::::::--..:::==*:::.
+                                                -...    .:.............:::=....:::::-:.:::---+==::.
+                                                .--.     .............:::::...:::::::::-::===#---..
+                                               ..:=-      ...........::.:-....:::::::-----=#%=---::
+                                               ...:=      ...........:::::....:::::-----::=@+-=:.::.
+                                                .:.+*:       ............:......::::--::-#@%-=-:.::.
+                                                 ::.#*     ..............:......:::::--:-@@-+==:.::.
+                                             .  ..-:.#.    .............::.....:::::::-:=@#*==-:::::
+                                            ..  ...=.+    ....... ......:......::--:::::=%*#+=::::::.
+                                            ..  ...-+=    ..... ......:.:. ...::::---::-=%%#+=::::::.
+                                            .......-+*.   ....    ......::.. .::-------:=%@*+=:::::::
+                                            ......:-=#:    ...    .....:.:... .::--:----=#@#+-::::::.
+                                           .......---%-           ..............:::-::---*@#+=-::::::
+                                            ...::.-+**.           ......:.......::::::---+@#*==-:::::.
+                                           ....:-=--*+  .        .......:.......::::::---#@%##*+-::::.
+                                           ...::-=++#.  ..       .......:........:::::---*@@%*=--:..:.
+                                           ...--==+*%.  .        .. ....:........::::-:--:#@%*=-:::::.
+                                            ..:-==+** .           ......:........:::::::::*@#+-.......
+                                            ...-=+*##             .....::........:::::::-*@%*=:.......
+                                            ..:--=*%.             ..::..:........::::::::*@*=:.  .....
+                                            ...--=*%.             ...:..:.....:..:::::-.:*@@@%++++=..
+                                        .  ....:=+*%              ......:.....:..::::::::*:-@#=-=+=-=
+                                           ....:=+#@ .           ......::....::..:::::::-*+.@#--====:
+                                               ...:=.=  .        ......::....::::::..:::=+% %#--=+==.
+                                         . .-++-:::++=           ......::.....::...:::::-=#==%+-=+=+
+                                           -::=*#@@*#.     ...... .....:......:...::::::-=*@+#=-=++-
+                                           ...-**%@%*.            ...:..:....::.:.:..:::-=*@%*=:+++:
+                                           ...=**+  =             .....:......::...::::--=*@@+:-=+=.
+                                           ..:=*#=  =         .......:..::........:::----=*%#=:-++=
+</span></pre>
+    </div>
+
+    <script>
+        const intro = document.getElementById('intro');
+        const title = document.getElementById('title');
+        const asciiLayer = document.getElementById('asciiLayer');
+        let revealed = false;
+        let audioCtx = null;
+        let staticGain = null;
+        let staticSource = null;
+        let staticFadeInterval = null;
+
+        function revealSilhouette() {
+            if (revealed) return;
+            revealed = true;
+            setTimeout(() => {
+                intro.style.display = 'none';
+                asciiLayer.classList.add('show');
+            }, 100);
+        }
+
+        function ensureStaticHum() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (!staticGain) {
+                staticGain = audioCtx.createGain();
+                staticGain.gain.value = 0;
+                staticGain.connect(audioCtx.destination);
+            }
+            if (!staticSource) {
+                const bufferSize = 2 * audioCtx.sampleRate;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * 0.35;
+                }
+                staticSource = audioCtx.createBufferSource();
+                staticSource.buffer = buffer;
+                staticSource.loop = true;
+                staticSource.connect(staticGain);
+                staticSource.start();
+            }
+        }
+
+        function fadeStaticHum(targetVolume, duration = 200) {
+            if (!audioCtx || !staticGain) return;
+            clearInterval(staticFadeInterval);
+            const start = staticGain.gain.value;
+            const delta = targetVolume - start;
+            if (Math.abs(delta) < 0.001 || duration <= 0) {
+                staticGain.gain.value = Math.max(0, Math.min(1, targetVolume));
+                return;
+            }
+            const startTime = performance.now();
+            staticFadeInterval = setInterval(() => {
+                const t = Math.min(1, (performance.now() - startTime) / duration);
+                staticGain.gain.value = Math.max(0, Math.min(1, start + delta * t));
+                if (t >= 1) {
+                    clearInterval(staticFadeInterval);
+                }
+            }, 40);
+        }
+
+        intro.addEventListener('click', revealSilhouette);
+        title.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                revealSilhouette();
+            }
+        });
+
+        document.querySelectorAll('.link-word').forEach(link => {
+            link.addEventListener('mouseenter', () => {
+                ensureStaticHum();
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(() => {});
+                }
+                fadeStaticHum(0.04, 140);
+            });
+            link.addEventListener('mouseleave', () => {
+                fadeStaticHum(0, 140);
+            });
+        });
+    </script>
 </body>
 </html>
