@@ -102,6 +102,63 @@
         let allMainLinesRevealed = false;
         let endingTriggered = false;
         let endingCompleted = false;
+        let collapseAudio = null;
+        let tiltingAudio = null;
+        let tiltingFadeInterval = null;
+        let tiltingAudioStarted = false;
+        let bracketedClickCount = 0;
+
+        function ensureTiltingAudio() {
+            if (!tiltingAudio) {
+                tiltingAudio = new Audio('tilting.mp3');
+                tiltingAudio.loop = true;
+                tiltingAudio.volume = 0;
+            }
+        }
+
+        function fadeTiltingAudio(targetVolume, duration = 500, onComplete) {
+            if (!tiltingAudio) return;
+            clearInterval(tiltingFadeInterval);
+            const start = tiltingAudio.volume;
+            const delta = targetVolume - start;
+            if (duration <= 0 || Math.abs(delta) < 0.001) {
+                tiltingAudio.volume = Math.max(0, Math.min(1, targetVolume));
+                if (onComplete) onComplete();
+                return;
+            }
+            const startTime = performance.now();
+            tiltingFadeInterval = setInterval(() => {
+                const now = performance.now();
+                const t = Math.min(1, (now - startTime) / duration);
+                tiltingAudio.volume = Math.max(0, Math.min(1, start + delta * t));
+                if (t >= 1) {
+                    clearInterval(tiltingFadeInterval);
+                    if (onComplete) onComplete();
+                }
+            }, 50);
+        }
+
+        function startTiltingAudio(targetVolume = 0.25, duration = 20000) {
+            ensureTiltingAudio();
+            tiltingAudioStarted = true;
+            if (tiltingAudio.paused) {
+                tiltingAudio.volume = 0;
+                tiltingAudio.play().catch(() => {});
+            }
+            fadeTiltingAudio(Math.min(0.6, targetVolume), duration); // cap the swell at 0.5
+        }
+
+        function stopTiltingAudio(onComplete, duration = 400) {
+            if (!tiltingAudio) {
+                if (onComplete) onComplete();
+                return;
+            }
+            fadeTiltingAudio(0, duration, () => {
+                tiltingAudio.pause();
+                tiltingAudio.currentTime = 0;
+                if (onComplete) onComplete();
+            });
+        }
 
         // Determine entry point: prefer URL param `?entry=...`, fall back to referrer
         function getQueryParam(name) {
@@ -131,7 +188,7 @@
             const text = line.textContent;
             line.textContent = '';
             line.classList.add('visible');
-            
+
             const interval = Math.round(1000 / cps);
             let i = 0;
             const typeInterval = setInterval(() => {
@@ -158,7 +215,7 @@
             const originalHTML = line.innerHTML;
             const fullText = line.textContent;
             const word = span.dataset.word;
-            
+
             // Find where the word appears in the full text
             const wordIndex = fullText.indexOf(word);
             if (wordIndex === -1) {
@@ -219,10 +276,10 @@
         function showKeywordOnly(line) {
             const span = line.querySelector('.bracketed-word');
             if (!span) return;
-            
+
             // Store original HTML for later
             line.dataset.originalHtml = line.innerHTML;
-            
+
             // Show only the bracketed word
             line.innerHTML = '';
             line.appendChild(span.cloneNode(true));
@@ -242,7 +299,7 @@
                 if (line.querySelector('.bracketed-word')) {
                     line.dataset.originalHtml = line.innerHTML;
                 }
-                
+
                 if (line.dataset.entry === entryWord) {
                     // Entry line: show keyword only, ready to be clicked
                     showKeywordOnly(line);
@@ -265,13 +322,22 @@
             const line = word.closest('.line');
             if (!line || !line.classList.contains('visible')) return;
 
+            // Count unique bracketed clicks to trigger slow tilting audio on the second one
+            if (!line.dataset.bracketedClicked) {
+                line.dataset.bracketedClicked = 'true';
+                bracketedClickCount += 1;
+                if (bracketedClickCount === 2 && !tiltingAudioStarted) {
+                    startTiltingAudio();
+                }
+            }
+
             // If this word hasn't been clicked yet, expand the line bidirectionally
             if (!word.classList.contains('revealed-word')) {
                 // Restore original HTML before bidirectional typing
                 if (line.dataset.originalHtml) {
                     line.innerHTML = line.dataset.originalHtml;
                 }
-                
+
                 typewriteBidirectional(line, () => {
                     // After this line expands, reveal the next keyword (or ending)
                     setTimeout(() => {
@@ -295,6 +361,8 @@
 
             // If [everything] was clicked, play out the remaining ending lines
             if (word.dataset.word === 'everything') {
+                // Swell the bgm further after "everything" for dilation before collapse
+                startTiltingAudio(0.5, 20000);
                 revealRemainingEnding();
             }
         });
@@ -311,7 +379,7 @@
             if (hiddenClickableMainLines.length > 0) {
                 const randomIndex = Math.floor(Math.random() * hiddenClickableMainLines.length);
                 lineNum = hiddenClickableMainLines.splice(randomIndex, 1)[0];
-                
+
                 const line = document.querySelector(`.line[data-line="${lineNum}"]`);
                 // Just show the keyword, don't expand yet
                 showKeywordOnly(line);
@@ -354,7 +422,7 @@
         function revealRemainingEnding() {
             if (endingCompleted) return;
             endingCompleted = true;
-            
+
             const firstEndingLine = endingLines[0];
             // Restore and expand the first ending line bidirectionally
             if (firstEndingLine && firstEndingLine.dataset.originalHtml) {
@@ -399,119 +467,139 @@
 
         // Make all characters fall to the bottom of the page
         function makeCharactersFall() {
-            const container = document.getElementById('poemContainer');
-            const allLines = container.querySelectorAll('.line.visible');
-            const characters = [];
-            
-            // Collect all character positions using a more accurate method
-            allLines.forEach(line => {
-                const text = line.textContent;
-                if (!text.trim()) return;
-                
-                // Create a range to measure each character precisely
-                const lineRect = line.getBoundingClientRect();
-                const computedStyle = window.getComputedStyle(line);
-                const fontSize = parseFloat(computedStyle.fontSize);
-                
-                // Wrap each character in a span to get exact positions
-                const originalHTML = line.innerHTML;
-                let charHTML = '';
-                for (let i = 0; i < text.length; i++) {
-                    const char = text[i];
-                    if (char === ' ') {
-                        charHTML += '<span class="char-measure">&nbsp;</span>';
-                    } else {
-                        charHTML += `<span class="char-measure">${char}</span>`;
+            function startCharacterFall() {
+                const container = document.getElementById('poemContainer');
+                const allLines = container.querySelectorAll('.line.visible');
+                const characters = [];
+
+                // Collect all character positions using a more accurate method
+                allLines.forEach(line => {
+                    const text = line.textContent;
+                    if (!text.trim()) return;
+
+                    // Create a range to measure each character precisely
+                    const lineRect = line.getBoundingClientRect();
+                    const computedStyle = window.getComputedStyle(line);
+                    const fontSize = parseFloat(computedStyle.fontSize);
+
+                    // Wrap each character in a span to get exact positions
+                    const originalHTML = line.innerHTML;
+                    let charHTML = '';
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        if (char === ' ') {
+                            charHTML += '<span class="char-measure">&nbsp;</span>';
+                        } else {
+                            charHTML += `<span class="char-measure">${char}</span>`;
+                        }
                     }
-                }
-                line.innerHTML = charHTML;
-                
-                const charSpans = line.querySelectorAll('.char-measure');
-                charSpans.forEach((span, i) => {
-                    const rect = span.getBoundingClientRect();
-                    characters.push({
-                        char: text[i],
-                        x: rect.left,
-                        y: rect.top,
-                        fontSize: fontSize
-                    });
-                });
-                
-                // Restore original HTML
-                line.innerHTML = originalHTML;
-            });
-            
-            // Hide original poem
-            container.style.visibility = 'hidden';
-            
-            // Create falling characters
-            const viewportHeight = window.innerHeight;
-            characters.forEach((charData, index) => {
-                if (charData.char.trim() === '') return; // Skip spaces
-                
-                const span = document.createElement('span');
-                span.textContent = charData.char;
-                span.style.position = 'fixed';
-                span.style.left = charData.x + 'px';
-                span.style.top = charData.y + 'px';
-                span.style.fontSize = charData.fontSize + 'px';
-                span.style.fontFamily = "'Courier New', monospace";
-                span.style.color = '#ffffff';
-                span.style.pointerEvents = 'none';
-                span.style.zIndex = '1000';
-                span.style.margin = '0';
-                span.style.padding = '0';
-                span.style.lineHeight = '1';
-                document.body.appendChild(span);
-                
-                // Random fall parameters - starts slow, accelerates, then spills at bottom
-                const fallDelay = Math.random() * 300;
-                const fallDuration = 1200 + Math.random() * 400;
-                const horizontalDrift = (Math.random() - 0.5) * 20;
-                const rotation = (Math.random() - 0.5) * 90;
-                const bottomY = viewportHeight - 20 - Math.random() * 30;
-                
-                // Spill parameters - how much they scatter when hitting bottom
-                const spillDirection = (Math.random() - 0.5) * 2; // -1 to 1
-                const spillDistance = 30 + Math.random() * 80;
-                const spillRotation = rotation + spillDirection * (180 + Math.random() * 180);
-                const finalX = charData.x + horizontalDrift + (spillDirection * spillDistance);
-                
-                setTimeout(() => {
-                    // First phase: fall with acceleration (slow start, fast end)
-                    span.style.transition = `top ${fallDuration}ms cubic-bezier(0.32, 0, 0.67, 0), left ${fallDuration}ms ease-out, transform ${fallDuration}ms ease-out`;
-                    span.style.top = bottomY + 'px';
-                    span.style.left = (charData.x + horizontalDrift) + 'px';
-                    span.style.transform = `rotate(${rotation}deg)`;
-                    
-                    // Second phase: spill/scatter on impact
-                    setTimeout(() => {
-                        span.style.transition = `left 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 400ms ease-out, opacity 600ms ease-out`;
-                        span.style.left = finalX + 'px';
-                        span.style.transform = `rotate(${spillRotation}deg)`;
-                        span.style.opacity = '0.5';
-                        
-                        // Store reference to fallen character
-                        fallenCharacters.push({
-                            element: span,
-                            finalX: finalX,
-                            finalY: bottomY
+                    line.innerHTML = charHTML;
+
+                    const charSpans = line.querySelectorAll('.char-measure');
+                    charSpans.forEach((span, i) => {
+                        const rect = span.getBoundingClientRect();
+                        characters.push({
+                            char: text[i],
+                            x: rect.left,
+                            y: rect.top,
+                            fontSize: fontSize
                         });
-                    }, fallDuration);
-                }, fallDelay);
-            });
-            
-            // After all characters have fallen and spilled, make the pile clickable
-            const maxFallTime = 300 + 1600 + 400 + 500; // fallDelay + fallDuration + spillTime + buffer
-            setTimeout(() => {
-                createClickablePile();
-            }, maxFallTime);
+                    });
+
+                    // Restore original HTML
+                    line.innerHTML = originalHTML;
+                });
+
+                // Hide original poem
+                container.style.visibility = 'hidden';
+
+                // Create falling characters
+                const viewportHeight = window.innerHeight;
+                characters.forEach((charData, index) => {
+                    if (charData.char.trim() === '') return; // Skip spaces
+
+                    const span = document.createElement('span');
+                    span.textContent = charData.char;
+                    span.style.position = 'fixed';
+                    span.style.left = charData.x + 'px';
+                    span.style.top = charData.y + 'px';
+                    span.style.fontSize = charData.fontSize + 'px';
+                    span.style.fontFamily = "'Courier New', monospace";
+                    span.style.color = '#ffffff';
+                    span.style.pointerEvents = 'none';
+                    span.style.zIndex = '1000';
+                    span.style.margin = '0';
+                    span.style.padding = '0';
+                    span.style.lineHeight = '1';
+                    document.body.appendChild(span);
+
+                    // Random fall parameters - starts slow, accelerates, then spills at bottom
+                    const fallDelay = Math.random() * 300;
+                    const fallDuration = 1200 + Math.random() * 400;
+                    const horizontalDrift = (Math.random() - 0.5) * 20;
+                    const rotation = (Math.random() - 0.5) * 90;
+                    const bottomY = viewportHeight - 20 - Math.random() * 30;
+
+                    // Spill parameters - how much they scatter when hitting bottom
+                    const spillDirection = (Math.random() - 0.5) * 2; // -1 to 1
+                    const spillDistance = 30 + Math.random() * 80;
+                    const spillRotation = rotation + spillDirection * (180 + Math.random() * 180);
+                    const finalX = charData.x + horizontalDrift + (spillDirection * spillDistance);
+
+                    setTimeout(() => {
+                        // First phase: fall with acceleration (slow start, fast end)
+                        span.style.transition = `top ${fallDuration}ms cubic-bezier(0.32, 0, 0.67, 0), left ${fallDuration}ms ease-out, transform ${fallDuration}ms ease-out`;
+                        span.style.top = bottomY + 'px';
+                        span.style.left = (charData.x + horizontalDrift) + 'px';
+                        span.style.transform = `rotate(${rotation}deg)`;
+
+                        // Second phase: spill/scatter on impact
+                        setTimeout(() => {
+                            span.style.transition = `left 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 400ms ease-out, opacity 600ms ease-out`;
+                            span.style.left = finalX + 'px';
+                            span.style.transform = `rotate(${spillRotation}deg)`;
+                            span.style.opacity = '0.5';
+
+                            // Store reference to fallen character
+                            fallenCharacters.push({
+                                element: span,
+                                finalX: finalX,
+                                finalY: bottomY
+                            });
+                        }, fallDuration);
+                    }, fallDelay);
+                });
+
+                // After all characters have fallen and spilled, make the pile clickable
+                const maxFallTime = 300 + 1600 + 400 + 500; // fallDelay + fallDuration + spillTime + buffer
+                setTimeout(() => {
+                    createClickablePile();
+                }, maxFallTime);
+            }
+
+            // Collapse hit pulls bgm down immediately and triggers the fall
+            const collapsePlay = () => {
+                if (!collapseAudio) {
+                    collapseAudio = new Audio('collapse.mp3');
+                }
+                setTimeout(() => {
+                    collapseAudio.currentTime = 0;
+                    collapseAudio.play().catch(() => {});
+                    // Yank the bgm volume down right as collapse hits
+                    stopTiltingAudio(undefined, 120);
+                    // Slight delay so the sound hits before the fall
+                    setTimeout(() => {
+                        startCharacterFall();
+                    }, 300);
+                }, 200); // small lead so the fade feels grabbed by the collapse hit
+            };
+            collapsePlay();
         }
-        
+
         // Track fallen characters
         let fallenCharacters = [];
         let pileClicked = false;
-        
+
         // Create clickable pile overlay
         function createClickablePile() {
             const pile = document.createElement('div');
@@ -524,7 +612,7 @@
             pile.style.cursor = 'pointer';
             pile.style.zIndex = '1001';
             document.body.appendChild(pile);
-            
+
             // Highlight effect on hover
             pile.addEventListener('mouseenter', () => {
                 fallenCharacters.forEach(c => {
@@ -533,7 +621,7 @@
                     c.element.style.color = '#ff6666';
                 });
             });
-            
+
             pile.addEventListener('mouseleave', () => {
                 if (!pileClicked) {
                     fallenCharacters.forEach(c => {
@@ -543,7 +631,7 @@
                     });
                 }
             });
-            
+
             pile.addEventListener('click', () => {
                 if (pileClicked) return;
                 pileClicked = true;
@@ -551,204 +639,205 @@
                 flyToSilhouettes();
             });
         }
-        
+
         // ASCII art data
-        const womanArt = `                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                              .#%#%#:                                            
-                                             #*-+#%@@#                                           
-                                           .@=.   -*#%*-                                         
-                                           #*-:.   .=*#+                                         
-                                           @++      +=**-                                        
-                                          -@#:       .##+                                        
-                                          *@@=. ..    *%*                                        
-                                          *@@%-..    -%#+                                        
-                                          *#@@*=-..  @%%#.                                       
-                                          *##%*..   :@#*%-                                       
-                                         =**%#*.    -@**#+.                                      
-                                       ###%@@%=.  . -%##%#++                                     
-                                     -#@@%@@@%+.    .+%%#*+*:.                                   
-                                    ==*%@@@@@@+      =%%%#+=                                     
-                                   .-+#%@@@@@@+      :%#%@#*                                     
-                                   :=+#%@@@@@@@@@@@@@@**%@%%=                                    
-                                   :=*#%@@@@%@@@@@@@@%*%%@%*.                                    
-                                   .+*#%@@@@%@@@@@@@@@%#%%#=                                     
-                                    ++=*%@@@@@@@@@@@@@@*++%=                                     
-                                   .=:.==@@@@@@@@@@@@@@@%#*=                                     
-                                   .-. .:%@@@@@@@@@@@@@@@@ =                                     
-                                   .:. . #@@@@@@@@@@@@@@@@ =                                     
-                                   :   . #@@@@@@@@@@@@@@@@ =                                     
-                                   .   = @@@@@@@@@@@@@@@@@ -                                     
-                                  ..   %:@@@@@@@@@@@@@@@@@*-:.                                   
-                                  :.  . @@@@@@@@@@@@@@@@@@@-=.                                   
-                                  :.  -*@@@@@@@@@@@@@@@@@@@#+.                                   
-                                  ::  #@@@@@@@@@@@@@@@@@@@@@*:                                   
-                                  .: .=@@@@@@@@@@@@@@@@@@@@@*-                                   
-                                   : .@@@@@@@@@@@@@@@@@@@@@@@=                                   
-                                   : =@@@@@@@@@@@@@@@@@@@@@@@*                                   
-                                  .: =@@@@@@@@@@@@@@@@@@@@@@@+                                   
-                                  .: .@@@%@@@@@@%%%%@@%#**#%+                                    
-                                  ::  -@@%%@%%%@@@@@%%%##%##..                                   
-                                  -. ..@%%###%##@@@@%%##**#+.+                                   
-                                   =   @@%%%%%%%%@@@@@%##*%-=                                    
-                                    ::+@@@%%#%%%%@@@@%%%###%+.                                   
-                                       @@%%####%%*@@%%%###%-                                     
-                                       :@@%%####@=@@%%###%%                                      
-                                        @@%%####@:@@%%###%=                                      
-                                        %@@%###%%.@@%%#*##                                       
-                                        +@%%###%#.@@%###%*                                       
-                                         @@####%*+@@%#*##-                                       
-                                         @%#%##%:=@%##*##                                        
-                                         @%%###% -@%#**##                                        
-                                         @@#*##% -@%%**#%                                        
-                                        .@@%#%%@ :@@%##%%                                        
-                                        =@@@#%@%  @@@%#%%                                        
-                                        @@@@@@@%  @@@@%@@=                                       
-                                        @@@@@@@@  @@@@%@%                                        
-                                        @@@@@@@@ *@@@@%%%                                        
-                                        =@@@@@@@ @@@@@%%%                                        
-                                         @@@@@@@ @@@@@@%-                                        
-                                         %@@@@@@ #@@@@@%                                         
-                                          @@@@@@ =@@@@@*                                         
-                                          #@@@@@ @@@@@%:                                         
-                                          .@@@@@+@@@@@#                                          
-                                           @@@@@=@@@@%#                                          
-                                           @@@%@#@* %@                                           
-                                           -:.-  :                                               
-                                                 #                                               
-                                           ..    #                                               
-                                                                                                 
-                                            --=-: :==-                                           
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
+        const womanArt = `
+
+
+
+
+
+                                              .#%#%#:
+                                             #*-+#%@@#
+                                           .@=.   -*#%*-
+                                           #*-:.   .=*#+
+                                           @++      +=**-
+                                          -@#:       .##+
+                                          *@@=. ..    *%*
+                                          *@@%-..    -%#+
+                                          *#@@*=-..  @%%#.
+                                          *##%*..   :@#*%-
+                                         =**%#*.    -@**#+.
+                                       ###%@@%=.  . -%##%#++
+                                     -#@@%@@@%+.    .+%%#*+*:.
+                                    ==*%@@@@@@+      =%%%#+=
+                                   .-+#%@@@@@@+      :%#%@#*
+                                   :=+#%@@@@@@@@@@@@@@**%@%%=
+                                   :=*#%@@@@%@@@@@@@@%*%%@%*.
+                                   .+*#%@@@@%@@@@@@@@@%#%%#=
+                                    ++=*%@@@@@@@@@@@@@@*++%=
+                                   .=:.==@@@@@@@@@@@@@@@%#*=
+                                   .-. .:%@@@@@@@@@@@@@@@@ =
+                                   .:. . #@@@@@@@@@@@@@@@@ =
+                                   :   . #@@@@@@@@@@@@@@@@ =
+                                   .   = @@@@@@@@@@@@@@@@@ -
+                                  ..   %:@@@@@@@@@@@@@@@@@*-:.
+                                  :.  . @@@@@@@@@@@@@@@@@@@-=.
+                                  :.  -*@@@@@@@@@@@@@@@@@@@#+.
+                                  ::  #@@@@@@@@@@@@@@@@@@@@@*:
+                                  .: .=@@@@@@@@@@@@@@@@@@@@@*-
+                                   : .@@@@@@@@@@@@@@@@@@@@@@@=
+                                   : =@@@@@@@@@@@@@@@@@@@@@@@*
+                                  .: =@@@@@@@@@@@@@@@@@@@@@@@+
+                                  .: .@@@%@@@@@@%%%%@@%#**#%+
+                                  ::  -@@%%@%%%@@@@@%%%##%##..
+                                  -. ..@%%###%##@@@@%%##**#+.+
+                                   =   @@%%%%%%%%@@@@@%##*%-=
+                                    ::+@@@%%#%%%%@@@@%%%###%+.
+                                       @@%%####%%*@@%%%###%-
+                                       :@@%%####@=@@%%###%%
+                                        @@%%####@:@@%%###%=
+                                        %@@%###%%.@@%%#*##
+                                        +@%%###%#.@@%###%*
+                                         @@####%*+@@%#*##-
+                                         @%#%##%:=@%##*##
+                                         @%%###% -@%#**##
+                                         @@#*##% -@%%**#%
+                                        .@@%#%%@ :@@%##%%
+                                        =@@@#%@%  @@@%#%%
+                                        @@@@@@@%  @@@@%@@=
+                                        @@@@@@@@  @@@@%@%
+                                        @@@@@@@@ *@@@@%%%
+                                        =@@@@@@@ @@@@@%%%
+                                         @@@@@@@ @@@@@@%-
+                                         %@@@@@@ #@@@@@%
+                                          @@@@@@ =@@@@@*
+                                          #@@@@@ @@@@@%:
+                                          .@@@@@+@@@@@#
+                                           @@@@@=@@@@%#
+                                           @@@%@#@* %@
+                                           -:.-  :
+                                                 #
+                                           ..    #
+
+                                            --=-: :==-
+
+
+
+
+
+
+
+
                                                                                                  `;
 
-        const manArt = `                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                  :--.                                           
-                                                --=====:.                                        
-                                                ==++--+=:                                        
-                                                +*#+-+**                                         
-                                              -:*#**=*#*-.                                       
-                                              =:===-:-=:.=                                       
-                                               -+#=-:-+*-                                        
-                                                ++=-:---                                         
-                                                **+=-=:.                                         
-                                              #**###*++-=                                        
-                                               **+**++==                                         
-                                                :++++++:                                         
-                                                  .==:                                           
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                                                                 
-                                                               .                                 
-                                ===    =                      =                                  
-                               -++++=+*.                      *#+=++=                            
-                               =+++++* .                       +*++++-                           
-                               =+++++:                          ***++=                           
-                               =+++**  .                        :#***+                           
-                              :++*#*   .                         ###**                           
-                              -+++**                             ###**=                          
-                              -+++*+                             **#*+=                          
-                              :+++++                             =##*+=                          
-                               +++++                              ##++-                          
-                               =+=++                              **++:                          
-                               =++++                              =*++                           
-                               .++++                              -*++                           
-                                =+++                              =*+=                           
-                                .+++                          .** #*+=                           
-                                 =++#                   -##%%%@+-*#*+=                           
-                                 =+**++=-%%#%##%%###**##%%%%%%@@-++++                            
-                                  +++++-@%%#####++**%%%%%%%%%%@@*++=-                            
-                                  =+*+++@@%%##%#*#%%%@@@%%%#%@%****+.                            
-                                  -***#++@%#####%%%%@@@@%%#%##@%***-                             
-                                   %+**##+%######%%@@@@%%%###@#%#+.                              
-                                    ++%*=@%######%+@@@@%%%#####:                                 
-                                     .*+%=%#####%% %@@@%%%###**.                                 
-                                     .*###########  @@@@%%####+                                  
-                                     .*##########   @@@%%%####+                                  
-                                     :###########   @@@%%%###*                                   
-                                     +*##########   %@@@%%###+                                   
-                                     :*#########    %%%%%%###                                    
-                                      #########*   .%%%%%%##*                                    
-                                     -#########=    %%%%%%%#+                                    
-                                     .*########     @@@%%%#*-                                    
-                                     +##%#####-     %%%%%%%#=                                    
-                                    .*%%%#####      @@%%@%##                                     
-                                    .*#%@@%#%       *%@@@%%%+                                    
-                                    +%%%%%%##       @%%%%%@#:                                    
-                                    #%%###%%*       %%%%%%%#                                     
-                                   .####%%%%        #%%%%%#*                                     
-                                   +#%%###%#        %@@%%%%-                                     
-                                   *%%%%%%%#       .%%%%%%#-                                     
-                                   ##%%#%#%#       *%%%%%%#-                                     
-                                   %#%%%%%#*       #%%%%%%%-                                     
-                                   %%%%%%%%:      :#%%%%%%%                                      
-                                  .#%%%%%%%       +%%%%%%%+                                      
-                                  .#%%%%%%%       @@@%%%%%                                       
-                                   #%%%%%%%       @@@@@%%                                        
-                                  .%%@@%%%%       %%@@@@@                                        
-                                  =%%%%%%%-       .%@%*+-.                                       
-                                  #%%@@%%%        .#@@++=-                                       
-                                 .=+%%%%%          %%###@%#.                                     
-                                -*+**%@%#             @@@%%#*                                    
-                               *%%*%@@@%*               :.                                       
-                            :*#%%%@@+                                                            
-                             :=*+-.                                                              
-                              .                                                                  
-                                                                                                 
-                                                                                                 
-                                                                                                 
+        const manArt = `
+
+
+                                                  :--.
+                                                --=====:.
+                                                ==++--+=:
+                                                +*#+-+**
+                                              -:*#**=*#*-.
+                                              =:===-:-=:.=
+                                               -+#=-:-+*-
+                                                ++=-:---
+                                                **+=-=:.
+                                              #**###*++-=
+                                               **+**++==
+                                                :++++++:
+                                                  .==:
+
+
+
+
+                                                               .
+                                ===    =                      =
+                               -++++=+*.                      *#+=++=
+                               =+++++* .                       +*++++-
+                               =+++++:                          ***++=
+                               =+++**  .                        :#***+
+                              :++*#*   .                         ###**
+                              -+++**                             ###**=
+                              -+++*+                             **#*+=
+                              :+++++                             =##*+=
+                               +++++                              ##++-
+                               =+=++                              **++:
+                               =++++                              =*++
+                               .++++                              -*++
+                                =+++                              =*+=
+                                .+++                          .** #*+=
+                                 =++#                   -##%%%@+-*#*+=
+                                 =+**++=-%%#%##%%###**##%%%%%%@@-++++
+                                  +++++-@%%#####++**%%%%%%%%%%@@*++=-
+                                  =+*+++@@%%##%#*#%%%@@@%%%#%@%****+.
+                                  -***#++@%#####%%%%@@@@%%#%##@%***-
+                                   %+**##+%######%%@@@@%%%###@#%#+.
+                                    ++%*=@%######%+@@@@%%%#####:
+                                     .*+%=%#####%% %@@@%%%###**.
+                                     .*###########  @@@@%%####+
+                                     .*##########   @@@%%%####+
+                                     :###########   @@@%%%###*
+                                     +*##########   %@@@%%###+
+                                     :*#########    %%%%%%###
+                                      #########*   .%%%%%%##*
+                                     -#########=    %%%%%%%#+
+                                     .*########     @@@%%%#*-
+                                     +##%#####-     %%%%%%%#=
+                                    .*%%%#####      @@%%@%##
+                                    .*#%@@%#%       *%@@@%%%+
+                                    +%%%%%%##       @%%%%%@#:
+                                    #%%###%%*       %%%%%%%#
+                                   .####%%%%        #%%%%%#*
+                                   +#%%###%#        %@@%%%%-
+                                   *%%%%%%%#       .%%%%%%#-
+                                   ##%%#%#%#       *%%%%%%#-
+                                   %#%%%%%#*       #%%%%%%%-
+                                   %%%%%%%%:      :#%%%%%%%
+                                  .#%%%%%%%       +%%%%%%%+
+                                  .#%%%%%%%       @@@%%%%%
+                                   #%%%%%%%       @@@@@%%
+                                  .%%@@%%%%       %%@@@@@
+                                  =%%%%%%%-       .%@%*+-.
+                                  #%%@@%%%        .#@@++=-
+                                 .=+%%%%%          %%###@%#.
+                                -*+**%@%#             @@@%%#*
+                               *%%*%@@@%*               :.
+                            :*#%%%@@+
+                             :=*+-.
+                              .
+
+
+
                                                                                                  `;
 
         // Fly characters to form silhouettes
         function flyToSilhouettes() {
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            
+
             // Parse ASCII art into character positions
             const womanChars = parseAsciiArt(womanArt);
             const manChars = parseAsciiArt(manArt);
-            
+
             // Calculate positions for left (woman) and right (man) silhouettes
             const charSize = 6; // font size for ASCII art
-            
+            const lineSpacing = 8; // increased leading between ASCII lines
+
             // Calculate the height of the ASCII art
-            const womanHeight = womanArt.split('\n').length * charSize;
-            const manHeight = manArt.split('\n').length * charSize;
-            
+            const womanHeight = womanArt.split('\n').length * lineSpacing;
+            const manHeight = manArt.split('\n').length * lineSpacing;
+
             // Center vertically
             const womanStartY = (viewportHeight - womanHeight) / 2;
             const manStartY = (viewportHeight - manHeight) / 2;
-            
+
             // Position on opposite ends (man closer to center to avoid cutoff)
-            const womanStartX = 20;
-            const manStartX = viewportWidth / 2 + 40;
-            
+            const womanStartX = 60;
+            const manStartX = viewportWidth / 2 + 80;
+
             // Get positions of fallen characters to use as spawn points
             const spawnPoints = fallenCharacters.map(c => ({
                 x: parseFloat(c.element.style.left),
                 y: parseFloat(c.element.style.top)
             }));
-            
+
             // Fade out original fallen characters
             fallenCharacters.forEach(c => {
                 c.element.style.transition = 'opacity 400ms';
                 c.element.style.opacity = '0';
             });
-            
+
             // Helper to get a random spawn point from the pile
             function getRandomSpawnPoint() {
                 if (spawnPoints.length === 0) {
@@ -756,13 +845,13 @@
                 }
                 return spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
             }
-            
+
             // Create and animate woman silhouette characters (spawning from pile)
             womanChars.forEach((pos, index) => {
                 const targetX = womanStartX + pos.x * charSize;
-                const targetY = womanStartY + pos.y * charSize;
+                const targetY = womanStartY + pos.y * lineSpacing;
                 const spawn = getRandomSpawnPoint();
-                
+
                 const span = document.createElement('span');
                 span.textContent = pos.char;
                 span.style.position = 'fixed';
@@ -777,7 +866,7 @@
                 span.style.transform = `rotate(${(Math.random() - 0.5) * 90}deg)`;
                 span.dataset.silhouette = 'woman';
                 document.body.appendChild(span);
-                
+
                 const delay = Math.random() * 800;
                 setTimeout(() => {
                     span.style.transition = 'all 1200ms cubic-bezier(0.34, 1.56, 0.64, 1)';
@@ -787,13 +876,13 @@
                     span.style.transform = 'rotate(0deg)';
                 }, delay);
             });
-            
+
             // Create and animate man silhouette characters (spawning from pile)
             manChars.forEach((pos, index) => {
                 const targetX = manStartX + pos.x * charSize;
-                const targetY = manStartY + pos.y * charSize;
+                const targetY = manStartY + pos.y * lineSpacing;
                 const spawn = getRandomSpawnPoint();
-                
+
                 const span = document.createElement('span');
                 span.textContent = pos.char;
                 span.style.position = 'fixed';
@@ -808,7 +897,7 @@
                 span.style.transform = `rotate(${(Math.random() - 0.5) * 90}deg)`;
                 span.dataset.silhouette = 'man';
                 document.body.appendChild(span);
-                
+
                 const delay = Math.random() * 800;
                 setTimeout(() => {
                     span.style.transition = 'all 1200ms cubic-bezier(0.34, 1.56, 0.64, 1)';
@@ -818,13 +907,13 @@
                     span.style.transform = 'rotate(0deg)';
                 }, delay);
             });
-            
+
             // After animation completes, create hover zones
             setTimeout(() => {
                 createSilhouetteInteractions(womanStartX, manStartX, womanStartY, manStartY, charSize, womanChars, manChars);
             }, 2200);
         }
-        
+
         // Parse ASCII art into array of {x, y, char}
         function parseAsciiArt(art) {
             const lines = art.split('\n');
@@ -839,11 +928,11 @@
             });
             return chars;
         }
-        
+
         // Create hover and click interactions for silhouettes
         function createSilhouetteInteractions(womanX, manX, womanY, manY, charSize, womanChars, manChars) {
             const viewportHeight = window.innerHeight;
-            
+
             // Create cursor-following tag
             const cursorTag = document.createElement('div');
             cursorTag.id = 'cursor-tag';
@@ -857,7 +946,7 @@
             cursorTag.style.transition = 'opacity 0.2s';
             cursorTag.style.whiteSpace = 'nowrap';
             document.body.appendChild(cursorTag);
-            
+
             // Particle container
             const particleContainer = document.createElement('div');
             particleContainer.id = 'particle-container';
@@ -869,22 +958,22 @@
             particleContainer.style.pointerEvents = 'none';
             particleContainer.style.zIndex = '999';
             document.body.appendChild(particleContainer);
-            
+
             // Heartbeat state
             let heartbeatInterval = null;
             let currentHoverTarget = null;
-            
+
             // Create a single heartbeat pulse of particles
             function createHeartbeatPulse(silhouetteType) {
                 const chars = document.querySelectorAll(`[data-silhouette="${silhouetteType}"]`);
                 if (chars.length === 0) return;
-                
+
                 // Pick random characters from the silhouette to emit particles from
                 const numParticles = 5 + Math.floor(Math.random() * 4);
                 for (let i = 0; i < numParticles; i++) {
                     const randomChar = chars[Math.floor(Math.random() * chars.length)];
                     const rect = randomChar.getBoundingClientRect();
-                    
+
                     const particle = document.createElement('div');
                     particle.style.position = 'fixed';
                     particle.style.left = rect.left + 'px';
@@ -897,35 +986,35 @@
                     particle.style.opacity = '0.8';
                     particle.style.boxShadow = '0 0 4px #ff6666';
                     particleContainer.appendChild(particle);
-                    
+
                     // Animate particle floating outward
                     const angle = Math.random() * Math.PI * 2;
                     const distance = 15 + Math.random() * 25;
                     const duration = 600 + Math.random() * 400;
-                    
+
                     particle.style.transition = `all ${duration}ms ease-out`;
-                    
+
                     requestAnimationFrame(() => {
                         particle.style.left = (rect.left + Math.cos(angle) * distance) + 'px';
                         particle.style.top = (rect.top + Math.sin(angle) * distance) + 'px';
                         particle.style.opacity = '0';
                         particle.style.transform = 'scale(0.5)';
                     });
-                    
+
                     // Remove particle after animation
                     setTimeout(() => {
                         particle.remove();
                     }, duration);
                 }
             }
-            
+
             // Start heartbeat effect
             function startHeartbeat(silhouetteType) {
                 if (heartbeatInterval) return;
-                
+
                 // Immediate first pulse
                 createHeartbeatPulse(silhouetteType);
-                
+
                 // Heartbeat rhythm: two quick pulses, then pause (lub-dub pattern)
                 let beatCount = 0;
                 heartbeatInterval = setInterval(() => {
@@ -933,7 +1022,7 @@
                         stopHeartbeat();
                         return;
                     }
-                    
+
                     beatCount++;
                     if (beatCount % 3 === 1) {
                         // First beat (lub)
@@ -945,7 +1034,7 @@
                     // Third interval is the pause
                 }, 400);
             }
-            
+
             // Stop heartbeat effect
             function stopHeartbeat() {
                 if (heartbeatInterval) {
@@ -953,13 +1042,13 @@
                     heartbeatInterval = null;
                 }
             }
-            
+
             // Track mouse for cursor tag
             document.addEventListener('mousemove', (e) => {
                 cursorTag.style.left = (e.clientX + 15) + 'px';
                 cursorTag.style.top = (e.clientY + 15) + 'px';
             });
-            
+
             // Woman hover zone (left) - offset to match actual character positions
             // The ASCII art has ~46 chars of leading whitespace, so offset the zone
             const womanActualX = womanX + (46 * charSize);
@@ -973,7 +1062,7 @@
             womanZone.style.cursor = 'pointer';
             womanZone.style.zIndex = '1002';
             document.body.appendChild(womanZone);
-            
+
             womanZone.addEventListener('mouseenter', () => {
                 currentHoverTarget = 'woman';
                 cursorTag.textContent = 'talk to her';
@@ -984,7 +1073,7 @@
                 });
                 startHeartbeat('woman');
             });
-            
+
             womanZone.addEventListener('mouseleave', () => {
                 currentHoverTarget = null;
                 cursorTag.style.opacity = '0';
@@ -993,11 +1082,11 @@
                 });
                 stopHeartbeat();
             });
-            
+
             womanZone.addEventListener('click', () => {
                 window.location.href = 'page10.html';
             });
-            
+
             // Man hover zone (right) - offset to match actual character positions
             // The ASCII art has ~32 chars of leading whitespace, so offset the zone
             const manActualX = manX + (32 * charSize);
@@ -1011,7 +1100,7 @@
             manZone.style.cursor = 'pointer';
             manZone.style.zIndex = '1002';
             document.body.appendChild(manZone);
-            
+
             manZone.addEventListener('mouseenter', () => {
                 currentHoverTarget = 'man';
                 cursorTag.textContent = 'talk to him';
@@ -1022,7 +1111,7 @@
                 });
                 startHeartbeat('man');
             });
-            
+
             manZone.addEventListener('mouseleave', () => {
                 currentHoverTarget = null;
                 cursorTag.style.opacity = '0';
@@ -1031,7 +1120,7 @@
                 });
                 stopHeartbeat();
             });
-            
+
             manZone.addEventListener('click', () => {
                 window.location.href = 'page11.html';
             });
